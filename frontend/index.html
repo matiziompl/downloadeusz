@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Downloadeusz - Twój Serwerowy Pobieracz</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+    <style>
+        /* Base Checkbox style fixes for white theme visibility */
+        .custom-toggle {
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white font-sans overflow-x-hidden flex flex-col items-center justify-center transition-colors duration-500 py-12" x-data="appData()" x-init="initApp()">
+
+    <!-- Dynamic Background -->
+    <div class="fixed inset-0 -z-20 bg-cover bg-center transition-all duration-700" :style="getBackgroundStyle() + `; filter: blur(${blurAmount}px); transform: scale(1.1);`"></div>
+    <div class="fixed inset-0 -z-10 bg-neutral-900/10"></div> <!-- Slight overlay for readability -->
+
+    <!-- Settings Gear Icon -->
+    <button @click="toggleSettings()" class="fixed top-6 right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md transition-all shadow-lg border border-white/10 group">
+        <i class="ph ph-gear text-2xl group-hover:rotate-90 transition-transform duration-300"></i>
+    </button>
+
+    <!-- Settings Widget (Slide over) -->
+    <div x-show="settingsOpen" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-x-full"
+         x-transition:enter-end="opacity-100 translate-x-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-x-0"
+         x-transition:leave-end="opacity-0 translate-x-full"
+         class="fixed top-0 right-0 h-full w-full sm:w-2/5 max-w-md bg-neutral-900/90 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-40 p-8 overflow-y-auto custom-scrollbar"
+         style="display: none;">
+         
+         <div class="flex justify-between items-center mb-8 mt-12 sm:mt-0">
+             <h2 class="text-2xl font-bold tracking-tight">Ustawienia</h2>
+             <button @click="toggleSettings()" class="p-2 rounded-full hover:bg-white/10"><i class="ph ph-x text-xl"></i></button>
+         </div>
+
+         <!-- Settings Sections -->
+         <div class="space-y-6">
+             
+             <!-- Visibility -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80">Wygląd</h3>
+                 <label class="flex items-center justify-between cursor-pointer">
+                     <span class="text-sm">Pokaż tytuł "Downloadeusz"</span>
+                     <input type="checkbox" x-model="showTitle" class="sr-only peer">
+                     <div class="w-11 h-6 bg-black/50 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative" :style="showTitle ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                 </label>
+             </div>
+
+             <!-- Theme Color -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80">Motyw</h3>
+                 <div class="grid grid-cols-8 gap-3">
+                     <template x-for="color in availableColors" :key="color">
+                         <button @click="themeColor = color" 
+                                 class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shadow-lg"
+                                 :class="themeColor === color ? 'border-white scale-110 ring-2 ring-white/30' : 'border-transparent'"
+                                 :style="`background-color: ${color}`"></button>
+                     </template>
+                     <!-- Transparent Auto-Color button -->
+                     <button @click="themeColor = 'auto'" 
+                             class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shadow-lg relative group flex items-center justify-center bg-white/5 backdrop-blur-sm"
+                             :class="themeColor === 'auto' ? 'border-white scale-110 ring-2 ring-white/30' : 'border-dashed border-white/40'">
+                             <i class="ph ph-magic-wand text-white/70 text-sm"></i>
+                             <div class="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-white/10 z-50">Uzależnij od tła</div>
+                     </button>
+                 </div>
+             </div>
+
+             <!-- Background Type -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80">Tło</h3>
+                 <div class="flex gap-2 mb-4 bg-black/40 p-1 rounded-xl border border-white/5">
+                     <button @click="bgType = 'preset'" :class="bgType === 'preset' ? 'bg-white/20 shadow' : 'opacity-60'" class="flex-1 py-1.5 rounded-lg text-sm transition-all">Presety</button>
+                     <button @click="bgType = 'image'" :class="bgType === 'image' ? 'bg-white/20 shadow' : 'opacity-60'" class="flex-1 py-1.5 rounded-lg text-sm transition-all">Tapeta</button>
+                 </div>
+
+                 <!-- Presets -->
+                 <div x-show="bgType === 'preset'" class="space-y-4">
+                     <div class="grid grid-cols-5 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                         <template x-for="(color, name) in presetColors" :key="name">
+                             <button @click="bgPreset = name" 
+                                     class="h-10 rounded-xl border-2 transition-all shadow-md hover:scale-105" 
+                                     :class="bgPreset === name ? `border-[${getEffectiveColor()}] scale-110 ring-2 ring-[${getEffectiveColor()}]/30` : 'border-white/10'"
+                                     :style="`background-color: ${color}`"></button>
+                         </template>
+                     </div>
+                 </div>
+
+                 <!-- Wallpaper selection -->
+                 <div x-show="bgType === 'image'" class="space-y-3">
+                     <div class="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                         <template x-for="img in wallpapers" :key="img">
+                             <img :src="`/wallpapers/${encodeURI(img)}`" 
+                                  @click="selectedImage = img"
+                                  class="h-20 w-full object-cover rounded-xl cursor-pointer border-2 transition-all shadow-md"
+                                  :class="selectedImage === img ? `border-[${getEffectiveColor()}] opacity-100 ring-2 ring-[${getEffectiveColor()}]/30` : 'border-transparent opacity-60 hover:opacity-100'">
+                         </template>
+                     </div>
+                     <p x-show="wallpapers.length === 0" class="text-sm text-white/50 text-center py-4">Brak tapet w folderze</p>
+                 </div>
+             </div>
+
+             <!-- Navidrome Integration -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">
+                     <i class="ph ph-music-notes"></i> Integracja z Navidrome
+                 </h3>
+                 <div class="space-y-4">
+                     <input type="text" x-model="naviUrl" placeholder="URL (np. http://192.168.1.102:4533)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
+                     <input type="text" x-model="naviUser" placeholder="Nazwa użytkownika" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
+                     <input type="password" x-model="naviPass" placeholder="Hasło" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
+                     <label class="flex items-center gap-3 cursor-pointer mt-2 group">
+                         <input type="checkbox" x-model="naviSync" class="sr-only peer">
+                         <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="naviSync ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                         <span class="text-sm font-medium text-white/80 group-hover:text-white transition-colors">Wymuś skanowanie i usuń .m3u</span>
+                     </label>
+                 </div>
+             </div>
+
+             <!-- Logs Mode -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80">Tryb Informacyjny</h3>
+                 <div class="flex flex-col gap-2">
+                     <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="logMode === 'simple' ? `border-color: ${getEffectiveColor()}` : ''">
+                         <input type="radio" x-model="logMode" value="simple" class="hidden">
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                             <div class="w-2 h-2 rounded-full" x-show="logMode === 'simple'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                         </div>
+                         <span class="text-sm">Proste info</span>
+                     </label>
+                     <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="logMode === 'advanced' ? `border-color: ${getEffectiveColor()}` : ''">
+                         <input type="radio" x-model="logMode" value="advanced" class="hidden">
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                             <div class="w-2 h-2 rounded-full" x-show="logMode === 'advanced'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                         </div>
+                         <span class="text-sm">Konsola na żywo</span>
+                     </label>
+                 </div>
+             </div>
+
+             <!-- Version -->
+             <div class="mt-8 text-center">
+                 <span class="text-xs font-medium text-white/30 tracking-wider">v1.3</span>
+             </div>
+
+         </div>
+    </div>
+    
+    <!-- Errors Widget Icon (All devices) -->
+    <button x-show="errorsList.length > 0" @click="errorsOpen = true" class="fixed top-6 left-6 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md transition-all shadow-lg border border-red-500/30 group" style="display: none;">
+        <i class="ph ph-warning-circle text-2xl text-red-400 group-hover:scale-110 transition-transform"></i>
+        <!-- Ping indicator -->
+        <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+        <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full"></span>
+    </button>
+    
+    <!-- Errors Overlay -->
+    <div x-show="errorsOpen && errorsList.length > 0" @click="errorsOpen = false" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" style="display: none;" x-transition.opacity></div>
+
+    <!-- Errors Left Panel -->
+    <aside class="fixed top-0 left-0 h-full w-full sm:w-96 bg-neutral-900/95 backdrop-blur-xl border-r border-white/10 p-8 pt-20 z-40 transition-transform duration-300 ease-in-out overflow-y-auto"
+           :class="errorsOpen ? 'translate-x-0' : '-translate-x-full'"
+           x-show="errorsList.length > 0" style="display: none;">
+        
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold flex items-center gap-2 text-red-400">
+                <i class="ph ph-warning-circle"></i> Błędy pobierania
+            </h3>
+            <button @click="errorsOpen = false" class="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+        </div>
+        
+        <p class="text-xs text-white/50 mb-4">Poniższe piosenki nie zostały pobrane i zapisano je w logach błędów:</p>
+        <div class="space-y-3">
+            <template x-for="(err, idx) in errorsList" :key="idx">
+                <div class="bg-black/30 p-3 rounded-xl border border-white/5">
+                    <p class="text-sm font-medium text-white/90 break-words" x-text="err.name"></p>
+                    <a x-show="err.url" :href="err.url" target="_blank" class="text-xs text-blue-400 hover:underline break-all mt-1 block" x-text="err.url"></a>
+                </div>
+            </template>
+        </div>
+        <button @click="fetchErrors()" class="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm transition-colors border border-white/5 flex items-center justify-center gap-2">
+            <i class="ph ph-arrows-clockwise"></i> Odśwież listę
+        </button>
+    </aside>
+
+    <!-- Settings Overlay -->
+    <div x-show="settingsOpen" @click="toggleSettings()" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" style="display: none;" x-transition.opacity></div>
+
+    <!-- Main Content Wrapper -->
+    <div class="flex flex-col w-full max-w-2xl mx-auto gap-8 px-6 items-center justify-center mt-6 xl:mt-12 flex-grow relative z-10">
+        
+        <!-- Main Content -->
+        <main class="w-full">
+            
+            <!-- Bento Box Container -->
+            <div class="bento-box p-8 sm:p-10 mb-6">
+                
+                <!-- Title -->
+                <div x-show="showTitle" x-transition.opacity class="text-center mb-10">
+                    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tighter bg-clip-text text-transparent drop-shadow-sm" :style="`background-image: linear-gradient(to right, #ffffff, ${getEffectiveColor()})`">
+                        Downloadeusz
+                    </h1>
+                </div>
+
+                <!-- Tool Selector -->
+                <div class="flex bg-black/50 p-1.5 rounded-2xl mb-8 border border-white/5 backdrop-blur-md">
+                    <button @click="selectedTool = 'spotdl'" 
+                            class="flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-300 relative z-10"
+                            :class="selectedTool === 'spotdl' ? 'shadow-lg' : 'text-white/50 hover:text-white/80'"
+                            :style="selectedTool === 'spotdl' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
+                        Spotify (spotdl)
+                    </button>
+                    <button @click="selectedTool = 'ytdl'" 
+                            class="flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-300 relative z-10"
+                            :class="selectedTool === 'ytdl' ? 'shadow-lg' : 'text-white/50 hover:text-white/80'"
+                            :style="selectedTool === 'ytdl' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
+                        YouTube (yt-dlp)
+                    </button>
+                </div>
+
+                <!-- Input Area -->
+                <div class="mb-6">
+                    <input type="text" x-model="url" placeholder="Wklej link do piosenki, playlisty lub filmu..." 
+                           class="w-full bg-white/95 text-black px-6 py-5 rounded-2xl text-lg outline-none focus:ring-4 transition-all shadow-inner font-medium placeholder-neutral-500"
+                           :style="`--tw-ring-color: ${getEffectiveColor()}80`">
+                </div>
+
+                <!-- spotdl Advanced Flags -->
+                <div x-show="selectedTool === 'spotdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Basic switches -->
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
+                        </label>
+
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.dont_filter" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.dont_filter ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Nie filtruj wyników</span>
+                        </label>
+
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.use_cookies" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.use_cookies ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Ciasteczka YT</span>
+                        </label>
+                        
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.save_errors" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.save_errors ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Zapisz błędy do pliku</span>
+                        </label>
+                    </div>
+
+                    <hr class="border-white/5">
+
+                    <!-- M3U Playlist Generation -->
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.generate_m3u" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.generate_m3u ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Wygeneruj playlistę</span>
+                        </label>
+                        
+                        <div x-show="flags.generate_m3u" x-transition class="pl-13 space-y-4">
+                            <!-- Public playlist toggle -->
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" x-model="flags.public_playlist" class="sr-only peer">
+                                <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.public_playlist ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                                <span class="text-sm font-medium text-white/80">Playlista publiczna (widoczna dla wszystkich)</span>
+                            </label>
+                            
+                            <!-- Playlist name input -->
+                            <div>
+                                <input type="text" x-model="flags.m3u_name" placeholder="Nazwa playlisty (zostaw puste by użyć domyślnej)" 
+                                       class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm outline-none focus:border-white/30 transition-colors placeholder-white/30">
+                                <p class="text-xs text-white/40 mt-1 pl-1">Zostawienie pustego użyje zmiennej {list}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr class="border-white/5">
+                    
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-white/80">Wątki pobierania:</span>
+                        <input type="number" x-model="flags.threads" min="1" max="8" class="w-16 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-center outline-none">
+                    </div>
+
+                </div>
+
+                <!-- yt-dlp specific flags -->
+                <div x-show="selectedTool === 'ytdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6">
+                     <label class="flex items-center gap-3 cursor-pointer mb-3">
+                        <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
+                        <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                        <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" x-model="flags.audio_only" class="sr-only peer">
+                        <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.audio_only ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                        <span class="text-sm font-medium text-white/80">Tylko Audio (MP3)</span>
+                    </label>
+                </div>
+
+                <!-- Command Preview -->
+                <div class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
+                    <p class="text-[10px] uppercase text-white/40 font-bold mb-1 flex items-center gap-2">
+                        <i class="ph ph-terminal"></i> Podgląd komendy
+                    </p>
+                    <div class="font-mono text-xs text-white/70 break-words whitespace-pre-wrap leading-relaxed opacity-80" x-text="getCommandPreview()"></div>
+                </div>
+
+                <!-- Action Button -->
+                <button @click="startDownload()" 
+                        class="w-full py-4 rounded-2xl font-bold text-lg shadow-xl hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                        :style="`background-color: ${getEffectiveColor()}; color: ${getTextColor()}`"
+                        :disabled="!url || loading">
+                    <i class="ph ph-download-simple text-xl" x-show="!loading"></i>
+                    <i class="ph ph-spinner animate-spin text-xl" x-show="loading" style="display: none;"></i>
+                    <span x-text="loading ? 'Uruchamianie...' : 'Pobierz'"></span>
+                </button>
+
+                <!-- Status Message (Simple Mode) -->
+                <div x-show="statusMsg && logMode === 'simple'" x-transition 
+                     class="mt-6 p-4 rounded-xl text-sm font-medium text-center border"
+                     :class="statusError ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'"
+                     x-text="statusMsg" style="display: none;">
+                </div>
+
+            </div>
+
+            <!-- Advanced Console -->
+            <div x-show="logMode === 'advanced'" x-transition class="bento-box p-6 w-full" style="display: none;">
+                <div class="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
+                    <span class="text-xs font-mono text-white/50 uppercase tracking-wider flex items-center gap-2">
+                        <i class="ph ph-terminal-window"></i> Terminal na żywo
+                    </span>
+                    <div class="flex gap-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                    </div>
+                </div>
+                
+                <div id="log-container" class="font-mono text-[11px] text-green-400/90 h-48 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-2">
+                    <template x-for="(log, index) in logs" :key="index">
+                        <div x-text="log" class="break-words"></div>
+                    </template>
+                    <div x-show="logs.length === 0" class="text-white/30 italic">Oczekuję na rozpoczęcie zadania...</div>
+                </div>
+            </div>
+
+        </main>
+        
+        <!-- Empty right spacing for perfect centering of main box on large screens if needed -->
+        <div class="hidden xl:block w-80 flex-shrink-0 order-3" x-show="errorsList.length > 0" style="display: none;"></div>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>

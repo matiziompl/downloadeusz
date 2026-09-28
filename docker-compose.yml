@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  downloadeusz:
+    build: .
+    container_name: downloadeusz
+    restart: unless-stopped
+    ports:
+      - "9000:8000"
+    volumes:
+      # Wolumen dla pobranych plików - celuje do Twojego folderu muzyki
+      - ~/media/music:/downloads
+      # Wolumen na pliki konfiguracyjne spotdl (youtube_cookies.txt, błędy)
+      - ~/spotdl:/spotdl_config
+      # Wolumen na tapety
+      - ~/media/wallpapers:/app/frontend/assets/wallpapers
+    environment:
+      - DOWNLOADS_DIR=/downloads
+      - SPOTDL_CONFIG_DIR=/spotdl_config
+      - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
