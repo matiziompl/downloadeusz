@@ -16,14 +16,21 @@ def test_build_ffmpeg_tag_command_basic():
         "year": "1991",
         "track_number": "1"
     }
-    cmd = build_ffmpeg_tag_command(tags, placeholder="PLIK_PIOSENKI.mp3")
-    assert cmd.startswith('ffmpeg -i "PLIK_PIOSENKI.mp3" -c copy')
+    # Test default in-place replacement
+    cmd = build_ffmpeg_tag_command(tags)
+    assert cmd.startswith("FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;")
+    assert 'ffmpeg -y -i "$FILE" -c copy' in cmd
     assert "-metadata 'title=Smells Like Teen Spirit'" in cmd
     assert "-metadata artist=Nirvana" in cmd or "-metadata 'artist=Nirvana'" in cmd
     assert "-metadata album=Nevermind" in cmd or "-metadata 'album=Nevermind'" in cmd
     assert "-metadata date=1991" in cmd or "-metadata 'date=1991'" in cmd
     assert "-metadata track=1" in cmd or "-metadata 'track=1'" in cmd
-    assert cmd.endswith('"PLIK_PIOSENKI_otagowany.mp3"')
+    assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in cmd
+
+    # Test explicit non-in-place mode
+    cmd_out = build_ffmpeg_tag_command(tags, placeholder="PLIK_PIOSENKI.mp3", replace_in_place=False)
+    assert cmd_out.startswith('ffmpeg -y -i "PLIK_PIOSENKI.mp3" -c copy')
+    assert cmd_out.endswith('"PLIK_PIOSENKI_otagowany.mp3"')
 
 
 def test_build_ffmpeg_tag_command_escaping():
@@ -34,10 +41,11 @@ def test_build_ffmpeg_tag_command_escaping():
         "year": "1979",
         "track_number": "2"
     }
-    cmd = build_ffmpeg_tag_command(tags, placeholder="PLIK_PIOSENKI.mp3")
+    cmd = build_ffmpeg_tag_command(tags)
     # Must use single quotes around values containing $ or double quotes to prevent shell evaluation
     assert "-metadata 'title=Song \"With Quotes\"'" in cmd
     assert "-metadata 'artist=A$AP Rocky & AC/DC \"Rock\"'" in cmd
+    assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in cmd
 
 
 def test_fetch_spotify_metadata_invalid_url():
@@ -67,7 +75,8 @@ def test_parse_spotdl_song_metadata():
     assert parsed["year"] == "1991"
     assert parsed["track_number"] == "3"
     assert parsed["cover_url"] == "https://i.scdn.co/image/ab67616d0000b273"
-    assert "PLIK_PIOSENKI.mp3" in parsed["command"]
+    assert "FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;" in parsed["command"]
+    assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in parsed["command"]
 
 
 def test_fetch_spotify_metadata_success(tmp_path):
@@ -96,9 +105,10 @@ def test_fetch_spotify_metadata_success(tmp_path):
         assert meta["album"] == "Nevermind"
         assert meta["year"] == "1991"
         assert meta["track_number"] == "2"
-        assert "PLIK_PIOSENKI.mp3" in meta["command"]
+        assert "FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;" in meta["command"]
         assert "-id3v2_version" in meta["command"]
         assert "https://image.url" in meta["command"]
+        assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in meta["command"]
 
 
 def test_build_ffmpeg_tag_command_with_cover_art():
@@ -110,8 +120,9 @@ def test_build_ffmpeg_tag_command_with_cover_art():
         "track_number": "5",
         "cover_url": "https://i.scdn.co/image/ab67616d0000b273"
     }
-    cmd = build_ffmpeg_tag_command(tags, placeholder="PLIK_PIOSENKI.mp3")
-    assert '-i "PLIK_PIOSENKI.mp3"' in cmd
+    cmd = build_ffmpeg_tag_command(tags)
+    assert cmd.startswith("FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;")
+    assert 'ffmpeg -y -i "$FILE"' in cmd
     assert '-i "https://i.scdn.co/image/ab67616d0000b273"' in cmd
     assert "-map 0:a -map 1:v" in cmd
     assert "-c:a copy -c:v copy" in cmd
@@ -119,6 +130,7 @@ def test_build_ffmpeg_tag_command_with_cover_art():
     assert '-metadata:s:v title="Album cover"' in cmd
     assert '-metadata:s:v comment="Cover (front)"' in cmd
     assert "-metadata title=Lithium" in cmd or "-metadata 'title=Lithium'" in cmd
-    assert cmd.endswith('"PLIK_PIOSENKI_otagowany.mp3"')
+    assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in cmd
+
 
 

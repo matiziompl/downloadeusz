@@ -4,10 +4,16 @@ import uuid
 import subprocess
 import shlex
 
-def build_ffmpeg_tag_command(tags: dict, placeholder: str = "PLIK_PIOSENKI.mp3", output_suffix: str = "_otagowany") -> str:
+def build_ffmpeg_tag_command(
+    tags: dict,
+    placeholder: str = "~/media/music/ARTYSTA/ALBUM/piosenka.mp3",
+    output_suffix: str = "_otagowany",
+    replace_in_place: bool = True
+) -> str:
     """
     Generates an ffmpeg tagging command for audio files using placeholder input.
     Properly escapes metadata using shlex.quote to prevent shell expansion ($) and command injection.
+    When replace_in_place is True, writes to a temporary file and replaces the target file using mv -f.
     """
     title = str(tags.get("title") or "")
     artist = str(tags.get("artist") or "")
@@ -28,28 +34,44 @@ def build_ffmpeg_tag_command(tags: dict, placeholder: str = "PLIK_PIOSENKI.mp3",
     if track:
         meta_args.append(f"-metadata {shlex.quote(f'track={track}')}")
 
-    # Output file name: replace extension with _otagowany.ext
-    base, ext = os.path.splitext(placeholder)
-    if not ext:
-        ext = ".mp3"
-    out_file = f"{base}{output_suffix}{ext}"
-
     meta_str = f" {' '.join(meta_args)}" if meta_args else ""
 
-    if cover_url:
-        cmd = (
-            f'ffmpeg -i "{placeholder}" -i "{cover_url}" '
-            f'-map 0:a -map 1:v -c:a copy -c:v copy '
-            f'-id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"'
-            f'{meta_str} "{out_file}"'
-        )
+    if replace_in_place:
+        file_assign = f"FILE={placeholder};" if placeholder.startswith("~") else f'FILE="{placeholder}";'
+        if cover_url:
+            cmd = (
+                f'{file_assign} '
+                f'ffmpeg -y -i "$FILE" -i "{cover_url}" '
+                f'-map 0:a -map 1:v -c:a copy -c:v copy '
+                f'-id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"'
+                f'{meta_str} "${{FILE}}_temp.mp3" && mv -f "${{FILE}}_temp.mp3" "$FILE"'
+            )
+        else:
+            cmd = (
+                f'{file_assign} '
+                f'ffmpeg -y -i "$FILE" -c copy'
+                f'{meta_str} "${{FILE}}_temp.mp3" && mv -f "${{FILE}}_temp.mp3" "$FILE"'
+            )
     else:
-        cmd = f'ffmpeg -i "{placeholder}" -c copy{meta_str} "{out_file}"'
+        base, ext = os.path.splitext(placeholder)
+        if not ext:
+            ext = ".mp3"
+        out_file = f"{base}{output_suffix}{ext}"
+
+        if cover_url:
+            cmd = (
+                f'ffmpeg -y -i "{placeholder}" -i "{cover_url}" '
+                f'-map 0:a -map 1:v -c:a copy -c:v copy '
+                f'-id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"'
+                f'{meta_str} "{out_file}"'
+            )
+        else:
+            cmd = f'ffmpeg -y -i "{placeholder}" -c copy{meta_str} "{out_file}"'
 
     return cmd
 
 
-def parse_spotdl_song_metadata(song: dict, placeholder: str = "PLIK_PIOSENKI.mp3") -> dict:
+def parse_spotdl_song_metadata(song: dict, placeholder: str = "~/media/music/ARTYSTA/ALBUM/piosenka.mp3") -> dict:
     """Extracts standardized tag fields from spotdl song object."""
     title = song.get("name") or "Nieznany tytuł"
     artists = song.get("artists")
