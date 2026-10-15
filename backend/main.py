@@ -140,6 +140,64 @@ async def test_slskd(req: SlskdTestRequest):
     except Exception as e:
         return {"ok": False, "message": f"Nie udało się połączyć z Soulseek (slskd): {str(e)}"}
 
+class SlskdOrganizeRequest(BaseModel):
+    slskd_url: str
+    slskd_api_key: str = ""
+    navi_sync: bool = False
+    navi_url: str = ""
+    navi_user: str = ""
+    navi_pass: str = ""
+
+def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
+    log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
+    with open(log_file_path, "w", encoding="utf-8") as f:
+        def log_cb(msg: str):
+            f.write(f"{msg}\n")
+            f.flush()
+
+        log_cb("=== Rozpoczynanie porządkowania plików Soulseek (slskd) ===")
+        from slskd_organizer import organize_slskd_downloads
+        try:
+            res = organize_slskd_downloads(
+                slskd_url=request.slskd_url,
+                slskd_api_key=request.slskd_api_key,
+                source_dir=SLSKD_DOWNLOADS_DIR,
+                dest_dir=DOWNLOADS_DIR,
+                log_callback=log_cb
+            )
+            log_cb(f"\n[Uprawnienia] Ustawianie praw dostępu (PUID:PGID {PUID}:{PGID})...")
+            fix_download_permissions(DOWNLOADS_DIR)
+
+            if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
+                log_cb("\n[Navidrome] Uruchamianie skanowania biblioteki po uporządkowaniu...")
+                try:
+                    import urllib.request
+                    import urllib.parse
+                    import hashlib
+                    import secrets
+                    salt = secrets.token_hex(6)
+                    token = hashlib.md5((request.navi_pass + salt).encode('utf-8')).hexdigest()
+                    params = {
+                        "u": request.navi_user,
+                        "t": token,
+                        "s": salt,
+                        "v": "1.16.1",
+                        "c": "downloadeusz",
+                        "f": "json"
+                    }
+                    query = urllib.parse.urlencode(params)
+                    api_url = f"{request.navi_url.rstrip('/')}/rest/startScan.view?{query}"
+                    req = urllib.request.Request(api_url)
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        log_cb("[Navidrome] Skanowanie zostało pomyślnie zlecone!")
+                except Exception as e:
+                    log_cb(f"[Navidrome] Nie udało się wywołać skanowania: {e}")
+
+            log_cb(f"\n[Zakończono] Uporządkowano: {res['organized']} utworów.")
+        except Exception as e:
+            log_cb(f"\n[Błąd]: {str(e)}")
+
+
 
 def run_download_task(task_id: str, request: DownloadRequest):
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
@@ -362,6 +420,16 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
     background_tasks.add_task(run_download_task, task_id, request)
     
     return {"status": "started", "task_id": task_id, "message": f"Rozpoczęto pobieranie w tle"}
+ 
+@app.post("/api/slskd/organize")
+async def start_slskd_organize(request: SlskdOrganizeRequest, background_tasks: BackgroundTasks):
+    if not request.slskd_url:
+        raise HTTPException(status_code=400, detail="Adres URL slskd jest wymagany")
+        
+    task_id = str(uuid.uuid4())
+    background_tasks.add_task(run_slskd_organize_task, task_id, request)
+    
+    return {"status": "started", "task_id": task_id, "message": "Rozpoczęto porządkowanie plików z Soulseeka"}
 
 @app.get("/api/logs/{task_id}")
 async def stream_logs(task_id: str):
