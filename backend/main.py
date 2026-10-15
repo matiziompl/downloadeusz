@@ -39,14 +39,14 @@ PGID = int(os.getenv("PGID", "1000"))
 os.makedirs(WALLPAPERS_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# Set default umask to 0002 so new files and directories are group-writable
+# Set default umask to 0000 so new files and directories are completely writable across all containers
 try:
-    os.umask(0o002)
+    os.umask(0o000)
 except Exception:
     pass
 
 def fix_download_permissions(target_dir: str):
-    """Ensure all downloaded files/folders belong to PUID:PGID with proper read/write permissions."""
+    """Ensure all downloaded files/folders belong to PUID:PGID with full read/write permissions for all services."""
     if not os.path.exists(target_dir):
         return
     try:
@@ -57,7 +57,7 @@ def fix_download_permissions(target_dir: str):
             stderr=subprocess.DEVNULL
         )
         subprocess.run(
-            ["chmod", "-R", "u+rwX,g+rwX,o+rX", target_dir],
+            ["chmod", "-R", "a+rwX", target_dir],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
