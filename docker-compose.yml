@@ -14,9 +14,12 @@ services:
       - ~/spotdl:/spotdl_config
       # Wolumen na tapety
       - ~/media/wallpapers:/app/frontend/assets/wallpapers
+      # Wolumen na pobrane pliki z Soulseeka (slskd) do uporządkowania
+      - ~/media/slskd/complete:/slskd_downloads
     environment:
       - PUID=1000
       - PGID=1000
       - DOWNLOADS_DIR=/downloads
       - SPOTDL_CONFIG_DIR=/spotdl_config
       - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
+      - SLSKD_DOWNLOADS_DIR=/slskd_downloads

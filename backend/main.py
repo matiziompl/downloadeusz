@@ -10,12 +10,19 @@ from pydantic import BaseModel
 app = FastAPI()
 
 # Configuration
-WALLPAPERS_DIR = os.getenv("WALLPAPERS_DIR", "../frontend/assets/wallpapers")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
+WALLPAPERS_DIR = os.getenv("WALLPAPERS_DIR", os.path.join(FRONTEND_DIR, "assets", "wallpapers"))
 DOWNLOADS_DIR = os.getenv("DOWNLOADS_DIR", "/downloads")
 SPOTDL_CONFIG_DIR = os.getenv("SPOTDL_CONFIG_DIR", "/spotdl_config")
-LOGS_DIR = os.path.join(os.path.dirname(__file__), "logs")
+SLSKD_DOWNLOADS_DIR = os.getenv("SLSKD_DOWNLOADS_DIR", "/slskd_downloads")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
 PUID = int(os.getenv("PUID", "1000"))
 PGID = int(os.getenv("PGID", "1000"))
+
+# Ensure wallpaper and log directories exist
+os.makedirs(WALLPAPERS_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Set default umask to 0002 so new files and directories are group-writable
 try:
@@ -59,6 +66,80 @@ class DownloadRequest(BaseModel):
     navi_user: str = ""
     navi_pass: str = ""
     navi_sync: bool = False
+
+class NaviTestRequest(BaseModel):
+    url: str
+    user: str = ""
+    password: str = ""
+
+class SlskdTestRequest(BaseModel):
+    url: str
+    api_key: str = ""
+
+@app.post("/api/test/navidrome")
+async def test_navidrome(req: NaviTestRequest):
+    if not req.url:
+        return {"ok": False, "message": "Brak adresu URL Navidrome"}
+    try:
+        import urllib.request
+        import urllib.parse
+        import hashlib
+        import secrets
+        import json
+
+        salt = secrets.token_hex(6)
+        token = hashlib.md5((req.password + salt).encode('utf-8')).hexdigest()
+        params = {
+            "u": req.user,
+            "t": token,
+            "s": salt,
+            "v": "1.16.1",
+            "c": "downloadeusz",
+            "f": "json"
+        }
+        query = urllib.parse.urlencode(params)
+        api_url = f"{req.url.rstrip('/')}/rest/ping.view?{query}"
+        request_obj = urllib.request.Request(api_url)
+        with urllib.request.urlopen(request_obj, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            sub_resp = data.get("subsonic-response", {})
+            if sub_resp.get("status") == "ok":
+                server_version = sub_resp.get("serverVersion", sub_resp.get("version", ""))
+                return {
+                    "ok": True,
+                    "message": "Połączono pomyślnie z Navidrome!",
+                    "server_version": server_version
+                }
+            else:
+                error = sub_resp.get("error", {})
+                return {"ok": False, "message": f"Błąd Navidrome: {error.get('message', 'Nieznany błąd')}"}
+    except Exception as e:
+        return {"ok": False, "message": f"Nie udało się połączyć z Navidrome: {str(e)}"}
+
+@app.post("/api/test/slskd")
+async def test_slskd(req: SlskdTestRequest):
+    if not req.url:
+        return {"ok": False, "message": "Brak adresu URL Soulseek (slskd)"}
+    try:
+        import urllib.request
+        import json
+
+        api_url = f"{req.url.rstrip('/')}/api/v0/transfers/downloads"
+        headers = {}
+        if req.api_key:
+            headers["X-API-Key"] = req.api_key
+
+        request_obj = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(request_obj, timeout=5) as response:
+            status_code = getattr(response, "status", None)
+            if status_code is None and hasattr(response, "getcode"):
+                status_code = response.getcode()
+            if status_code is None or status_code == 200:
+                return {"ok": True, "message": "Połączono pomyślnie z Soulseek (slskd)!"}
+            return {"ok": False, "message": f"Odpowiedź serwera: {status_code}"}
+    except Exception as e:
+        return {"ok": False, "message": f"Nie udało się połączyć z Soulseek (slskd): {str(e)}"}
+
 
 def run_download_task(task_id: str, request: DownloadRequest):
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
@@ -347,7 +428,7 @@ async def get_wallpapers():
 # Serve wallpapers separately so frontend can load them
 app.mount("/wallpapers", StaticFiles(directory=WALLPAPERS_DIR), name="wallpapers")
 # Serve static files (Frontend) - MUST be at the bottom!
-app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
