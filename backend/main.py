@@ -14,6 +14,34 @@ WALLPAPERS_DIR = os.getenv("WALLPAPERS_DIR", "../frontend/assets/wallpapers")
 DOWNLOADS_DIR = os.getenv("DOWNLOADS_DIR", "/downloads")
 SPOTDL_CONFIG_DIR = os.getenv("SPOTDL_CONFIG_DIR", "/spotdl_config")
 LOGS_DIR = os.path.join(os.path.dirname(__file__), "logs")
+PUID = int(os.getenv("PUID", "1000"))
+PGID = int(os.getenv("PGID", "1000"))
+
+# Set default umask to 0002 so new files and directories are group-writable
+try:
+    os.umask(0o002)
+except Exception:
+    pass
+
+def fix_download_permissions(target_dir: str):
+    """Ensure all downloaded files/folders belong to PUID:PGID with proper read/write permissions."""
+    if not os.path.exists(target_dir):
+        return
+    try:
+        subprocess.run(
+            ["chown", "-R", f"{PUID}:{PGID}", target_dir],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        subprocess.run(
+            ["chmod", "-R", "u+rwX,g+rwX,o+rX", target_dir],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception as e:
+        print(f"[Permissions] Warning: Failed to adjust ownership in {target_dir}: {e}")
 
 # Ensure local directories exist (mostly for logs)
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -21,6 +49,7 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 if not os.path.exists(DOWNLOADS_DIR):
     try: os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     except: pass
+fix_download_permissions(DOWNLOADS_DIR)
 
 class DownloadRequest(BaseModel):
     tool: str # 'ytdl' or 'spotdl'
@@ -105,6 +134,11 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 f.flush()
                 
             process.wait()
+            
+            # Ensure downloaded files have correct PUID:PGID and permissions
+            f.write(f"\n[Uprawnienia] Ustawianie praw dostepu (PUID:PGID {PUID}:{PGID})...\n")
+            f.flush()
+            fix_download_permissions(DOWNLOADS_DIR)
             
             # Navidrome Integration
             if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
