@@ -112,18 +112,6 @@
                  </div>
              </div>
 
-             <!-- Credentials Persistence Option -->
-             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
-                 <label class="flex items-start justify-between cursor-pointer gap-4">
-                     <div>
-                         <span class="text-sm font-medium text-white/90 block">Zapamiętaj dane logowania i hasła na tym urządzeniu</span>
-                         <p class="text-xs text-white/50 mt-1 leading-relaxed">Zapisuje hasła do Navidrome i Soulseek w localStorage przeglądarki, dzięki czemu po restarcie kontenera nie trzeba ich wpisywać ponownie.</p>
-                     </div>
-                     <input type="checkbox" x-model="rememberCredentials" class="sr-only peer">
-                     <div class="w-11 h-6 bg-black/50 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative flex-shrink-0 mt-0.5" :style="rememberCredentials ? `background-color: ${getEffectiveColor()}` : ''"></div>
-                 </label>
-             </div>
-
              <!-- Navidrome Integration -->
              <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
                  <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">

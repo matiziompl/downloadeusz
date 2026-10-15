@@ -17,7 +17,7 @@ The standout features of Downloadeusz are its **direct integration with Navidrom
 - 🔄 **Soulseek (slskd) Auto-Organizer**: Automatically pulls completed downloads from your slskd daemon using your account login (`slskd`/`slskd`), parses audio tags (FLAC, MP3, M4A) via `mutagen`, and moves them into `{artist}/{year} - {album}/{track} {title}.{ext}`, then notifies Navidrome!
 - 🔍 **Smart Navidrome Deduplication**: Automatically queries Navidrome before downloading Spotify/YouTube tracks. Skip songs already in your library (toggle between "FLAC / Lossless only" or "Any format").
 - 📡 **Live Terminal (SSE) & Status Bar**: Monitor downloads and Soulseek organization in real-time. Instant connection test buttons and health status indicators for Navidrome and slskd.
-- 💾 **Client Credentials Persistence**: Credentials and settings are safely stored in your browser's `localStorage` — restarting or updating the Docker container won't make you type them again.
+- 💾 **Client Configuration Persistence**: Service URLs, logins, wallpapers, and all preferences are safely stored in your browser's `localStorage` (passwords are kept in session memory only for security) — restarting or updating the Docker container won't wipe your configuration.
 - 🎶 **Native Navidrome Playlists**: Downloadeusz translates temporary `.m3u` files into internal Navidrome IDs and creates fully editable native playlists.
 - ⚠️ **Smart Error Handling**: A slide-out panel alerts you if a specific song couldn't be found, with direct links to the original track.
 
@@ -75,8 +75,8 @@ docker compose up --build -d
    - Enter your slskd `URL` (e.g., `http://your-server-ip:5030`), `Username` (default: `slskd`), and `Password` (default: `slskd`).
    - Click **"Testuj połączenie"** to verify login and transfers access.
    - Click **"Uporządkuj pliki"** under the link tile to import and organize downloaded FLAC/MP3 files into your library.
-4. **Client Credentials**:
-   - Make sure "Zapamiętaj dane logowania i hasła na tym urządzeniu" is checked (default: ON) so you never need to re-type passwords after container restarts.
+4. **Client Configuration Persistence**:
+   - URLs, logins, themes, and wallpapers are automatically saved in your browser (`localStorage`). For security, passwords are kept only in the active session memory and are never written to disk or storage.
 
 ## 🛠️ Tech Stack
 - **Backend:** Python (FastAPI, asyncio, Uvicorn, Mutagen, Subsonic & slskd API clients)
