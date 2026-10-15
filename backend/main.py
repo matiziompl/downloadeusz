@@ -201,59 +201,115 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
 
 def run_download_task(task_id: str, request: DownloadRequest):
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
+    temp_spotdl_file = os.path.join(SPOTDL_CONFIG_DIR, f"temp_{task_id}.spotdl")
     
-    cmd = []
-    if request.tool == "spotdl":
-        # Wyczyść stary plik błędów przed nowym pobieraniem
-        error_file = os.path.join(SPOTDL_CONFIG_DIR, "nadal_brakujace.txt")
-        if os.path.exists(error_file):
-            try:
-                os.remove(error_file)
-            except:
-                pass
-                
-        cmd = ["spotdl", request.url]
-        # Hardcoded hierarchy
-        cmd.extend(["--output", "{artist}/{year} - {album}/{track-number} {title}.{output-ext}"])
-        
-        flags = request.flags
-        if flags.get("skip_downloaded"):
-            cmd.extend(["--overwrite", "skip"])
-            
-        if flags.get("use_cookies"):
-            cmd.extend(["--cookie-file", os.path.join(SPOTDL_CONFIG_DIR, "youtube_cookies.txt")])
-            
-        if flags.get("dont_filter"):
-            cmd.append("--dont-filter-results")
-            
-        if flags.get("audio_sources"):
-            cmd.extend(["--audio", "youtube-music", "youtube", "soundcloud"])
-            
-        if flags.get("threads"):
-            cmd.extend(["--threads", str(flags.get("threads"))])
-            
-        if flags.get("save_errors"):
-            cmd.extend(["--save-errors", os.path.join(SPOTDL_CONFIG_DIR, "nadal_brakujace.txt")])
-            
-        if flags.get("yt_dlp_args"):
-            cmd.extend(["--yt-dlp-args", "--sleep-interval 2 --max-sleep-interval 4"])
-            
-        if flags.get("generate_m3u"):
-            m3u_name = flags.get("m3u_name", "{list}")
-            if not m3u_name.strip():
-                m3u_name = "{list}"
-            cmd.extend(["--m3u", f"temp_dl_{m3u_name}.m3u"])
-            
-    elif request.tool == "ytdl":
-        cmd = ["yt-dlp", request.url]
-        if request.flags.get("audio_only"):
-            cmd.extend(["-x", "--audio-format", "mp3"])
-        if request.flags.get("skip_downloaded"):
-            cmd.append("--no-overwrites")
-    else:
-        return
-
     with open(log_file_path, "w", encoding="utf-8") as f:
+        cmd = []
+        flags = request.flags
+
+        if request.tool == "spotdl":
+            # Wyczyść stary plik błędów przed nowym pobieraniem
+            error_file = os.path.join(SPOTDL_CONFIG_DIR, "nadal_brakujace.txt")
+            if os.path.exists(error_file):
+                try:
+                    os.remove(error_file)
+                except:
+                    pass
+
+            target_source = request.url
+
+            # Navidrome deduplication pre-check
+            if flags.get("check_navidrome") and request.navi_url and request.navi_user and request.navi_pass:
+                f.write("[Deduplikacja] Pobieranie metadanych utworów do weryfikacji w bazie Navidrome...\n")
+                f.flush()
+                try:
+                    from navidrome_dedup import filter_existing_songs
+                    subprocess.run(
+                        ["spotdl", "save", request.url, "--save-file", temp_spotdl_file],
+                        capture_output=True,
+                        text=True,
+                        cwd=DOWNLOADS_DIR
+                    )
+                    if os.path.exists(temp_spotdl_file):
+                        with open(temp_spotdl_file, "r", encoding="utf-8") as sf:
+                            song_list = json.load(sf)
+                        
+                        skip_mode = flags.get("navidrome_skip_mode", "flac_only")
+                        def d_log(msg):
+                            f.write(f"{msg}\n")
+                            f.flush()
+
+                        kept, skipped = filter_existing_songs(
+                            songs=song_list,
+                            navi_url=request.navi_url,
+                            navi_user=request.navi_user,
+                            navi_pass=request.navi_pass,
+                            skip_mode=skip_mode,
+                            log_callback=d_log
+                        )
+
+                        if not kept:
+                            f.write(f"\n[Deduplikacja] Wszystkie utwory ({len(skipped)}) znajdują się już w Twojej bibliotece Navidrome! Pomijam pobieranie.\n")
+                            f.write("\n[Zakończono z kodem 0]\n")
+                            try:
+                                os.remove(temp_spotdl_file)
+                            except:
+                                pass
+                            return
+
+                        if skipped:
+                            f.write(f"[Deduplikacja] Pominięto {len(skipped)} istniejących utworów. Pobieranie {len(kept)} brakujących pozycji...\n")
+                            with open(temp_spotdl_file, "w", encoding="utf-8") as sf:
+                                json.dump(kept, sf)
+                            target_source = temp_spotdl_file
+                except Exception as e:
+                    f.write(f"[Deduplikacja] Ostrzeżenie: Błąd podczas sprawdzania duplikatów: {e}. Kontynuuję standardowe pobieranie.\n")
+                    f.flush()
+
+            if target_source == temp_spotdl_file:
+                cmd = ["spotdl", "download", temp_spotdl_file]
+            else:
+                cmd = ["spotdl", target_source]
+
+            # Hardcoded hierarchy
+            cmd.extend(["--output", "{artist}/{year} - {album}/{track-number} {title}.{output-ext}"])
+            
+            if flags.get("skip_downloaded"):
+                cmd.extend(["--overwrite", "skip"])
+                
+            if flags.get("use_cookies"):
+                cmd.extend(["--cookie-file", os.path.join(SPOTDL_CONFIG_DIR, "youtube_cookies.txt")])
+                
+            if flags.get("dont_filter"):
+                cmd.append("--dont-filter-results")
+                
+            if flags.get("audio_sources"):
+                cmd.extend(["--audio", "youtube-music", "youtube", "soundcloud"])
+                
+            if flags.get("threads"):
+                cmd.extend(["--threads", str(flags.get("threads"))])
+                
+            if flags.get("save_errors"):
+                cmd.extend(["--save-errors", os.path.join(SPOTDL_CONFIG_DIR, "nadal_brakujace.txt")])
+                
+            if flags.get("yt_dlp_args"):
+                cmd.extend(["--yt-dlp-args", "--sleep-interval 2 --max-sleep-interval 4"])
+                
+            if flags.get("generate_m3u"):
+                m3u_name = flags.get("m3u_name", "{list}")
+                if not m3u_name.strip():
+                    m3u_name = "{list}"
+                cmd.extend(["--m3u", f"temp_dl_{m3u_name}.m3u"])
+                
+        elif request.tool == "ytdl":
+            cmd = ["yt-dlp", request.url]
+            if request.flags.get("audio_only"):
+                cmd.extend(["-x", "--audio-format", "mp3"])
+            if request.flags.get("skip_downloaded"):
+                cmd.append("--no-overwrites")
+        else:
+            return
+
         f.write(f"Wykonywanie komendy: {' '.join(cmd)}\n")
         f.flush()
         
@@ -403,9 +459,21 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 except Exception as e:
                     f.write(f"[Navidrome] Blad integracji: {str(e)}\n")
             
+            # Clean up temporary spotdl file if present
+            if os.path.exists(temp_spotdl_file):
+                try:
+                    os.remove(temp_spotdl_file)
+                except:
+                    pass
+
             f.write(f"\n[Zakończono z kodem {process.returncode}]\n")
             
         except Exception as e:
+            if os.path.exists(temp_spotdl_file):
+                try:
+                    os.remove(temp_spotdl_file)
+                except:
+                    pass
             f.write(f"\n[Błąd]: {str(e)}\n")
 
 
