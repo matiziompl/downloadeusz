@@ -12,8 +12,14 @@ function appData() {
         
         // Services & Integrations
         slskdUrl: localStorage.getItem('slskdUrl') || '',
-        slskdApiKey: localStorage.getItem('slskdApiKey') || '',
-        statusDisplayMode: localStorage.getItem('statusDisplayMode') || 'errors_only',
+        slskdUser: localStorage.getItem('slskdUser') || '',
+        slskdPass: localStorage.getItem('slskdPass') || '',
+        naviUrl: localStorage.getItem('naviUrl') || '',
+        naviUser: localStorage.getItem('naviUser') || '',
+        naviPass: localStorage.getItem('naviPass') || '',
+        naviSync: localStorage.getItem('naviSync') === 'true',
+        rememberCredentials: localStorage.getItem('rememberCredentials') !== 'false',
+        statusDisplayMode: (localStorage.getItem('statusDisplayMode') && localStorage.getItem('statusDisplayMode') !== 'errors_only') ? localStorage.getItem('statusDisplayMode') : 'not_logged_or_error',
         naviStatus: { tested: false, ok: false, msg: '' },
         slskdStatus: { tested: false, ok: false, msg: '' },
         testingNavi: false,
@@ -75,11 +81,6 @@ function appData() {
         errorsOpen: false,
         
         logMode: 'advanced', // changed default to advanced since user wants terminal
-        
-        naviUrl: localStorage.getItem('naviUrl') || '',
-        naviUser: localStorage.getItem('naviUser') || '',
-        naviPass: localStorage.getItem('naviPass') || '',
-        naviSync: localStorage.getItem('naviSync') === 'true',
 
         initApp() {
             this.loadSettings();
@@ -100,23 +101,54 @@ function appData() {
                 localStorage.setItem('statusDisplayMode', value);
                 this.saveSettings();
             });
+            this.$watch('rememberCredentials', value => {
+                localStorage.setItem('rememberCredentials', value ? 'true' : 'false');
+                if (!value) {
+                    localStorage.removeItem('naviPass');
+                    localStorage.removeItem('slskdPass');
+                } else {
+                    if (this.naviPass) localStorage.setItem('naviPass', this.naviPass);
+                    if (this.slskdPass) localStorage.setItem('slskdPass', this.slskdPass);
+                }
+                this.saveSettings();
+            });
             this.$watch('flags', () => this.saveSettings(), { deep: true });
             
             // Watchers for navidrome credentials
             this.$watch('naviUrl', value => {
                 localStorage.setItem('naviUrl', value);
                 this.naviStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
             });
-            this.$watch('naviUser', value => localStorage.setItem('naviUser', value));
-            this.$watch('naviPass', value => localStorage.setItem('naviPass', value));
-            this.$watch('naviSync', value => localStorage.setItem('naviSync', value));
+            this.$watch('naviUser', value => {
+                localStorage.setItem('naviUser', value);
+                this.naviStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
+            });
+            this.$watch('naviPass', value => {
+                this.naviStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
+            });
+            this.$watch('naviSync', value => {
+                localStorage.setItem('naviSync', value ? 'true' : 'false');
+                this.saveSettings();
+            });
             
             // Watchers for soulseek credentials
             this.$watch('slskdUrl', value => {
                 localStorage.setItem('slskdUrl', value);
                 this.slskdStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
             });
-            this.$watch('slskdApiKey', value => localStorage.setItem('slskdApiKey', value));
+            this.$watch('slskdUser', value => {
+                localStorage.setItem('slskdUser', value);
+                this.slskdStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
+            });
+            this.$watch('slskdPass', value => {
+                this.slskdStatus = { tested: false, ok: false, msg: '' };
+                this.saveSettings();
+            });
 
             this.$nextTick(() => {
                 this.updateExtractedColor();
@@ -138,10 +170,26 @@ function appData() {
                 whiteGradient: this.whiteGradient,
                 logMode: this.logMode,
                 statusDisplayMode: this.statusDisplayMode,
+                rememberCredentials: this.rememberCredentials,
                 flags: this.flags
             };
             localStorage.setItem('downloadeusz_settings', JSON.stringify(settings));
             localStorage.setItem('statusDisplayMode', this.statusDisplayMode);
+            localStorage.setItem('rememberCredentials', this.rememberCredentials ? 'true' : 'false');
+
+            localStorage.setItem('slskdUrl', this.slskdUrl || '');
+            localStorage.setItem('slskdUser', this.slskdUser || '');
+            localStorage.setItem('naviUrl', this.naviUrl || '');
+            localStorage.setItem('naviUser', this.naviUser || '');
+            localStorage.setItem('naviSync', this.naviSync ? 'true' : 'false');
+
+            if (this.rememberCredentials) {
+                localStorage.setItem('slskdPass', this.slskdPass || '');
+                localStorage.setItem('naviPass', this.naviPass || '');
+            } else {
+                localStorage.removeItem('slskdPass');
+                localStorage.removeItem('naviPass');
+            }
         },
         
         loadSettings() {
@@ -157,7 +205,13 @@ function appData() {
                     this.blurAmount = settings.blurAmount || 0;
                     this.whiteGradient = settings.whiteGradient || 0;
                     this.logMode = settings.logMode || 'advanced';
-                    this.statusDisplayMode = settings.statusDisplayMode || localStorage.getItem('statusDisplayMode') || 'errors_only';
+                    this.statusDisplayMode = settings.statusDisplayMode || localStorage.getItem('statusDisplayMode') || 'not_logged_or_error';
+                    if (this.statusDisplayMode === 'errors_only') {
+                        this.statusDisplayMode = 'not_logged_or_error';
+                    }
+                    if (settings.rememberCredentials !== undefined) {
+                        this.rememberCredentials = settings.rememberCredentials;
+                    }
                     
                     if (settings.flags) {
                         this.flags = {
@@ -169,8 +223,22 @@ function appData() {
                     }
                 } catch (e) {}
             }
-            if (!this.statusDisplayMode) {
-                this.statusDisplayMode = localStorage.getItem('statusDisplayMode') || 'errors_only';
+            if (!this.statusDisplayMode || this.statusDisplayMode === 'errors_only') {
+                const storedMode = localStorage.getItem('statusDisplayMode');
+                this.statusDisplayMode = (storedMode && storedMode !== 'errors_only') ? storedMode : 'not_logged_or_error';
+            }
+            const remCred = localStorage.getItem('rememberCredentials');
+            if (remCred !== null) {
+                this.rememberCredentials = remCred !== 'false';
+            }
+            this.slskdUrl = localStorage.getItem('slskdUrl') || this.slskdUrl || '';
+            this.slskdUser = localStorage.getItem('slskdUser') || this.slskdUser || '';
+            this.slskdPass = this.rememberCredentials ? (localStorage.getItem('slskdPass') || this.slskdPass || '') : '';
+            this.naviUrl = localStorage.getItem('naviUrl') || this.naviUrl || '';
+            this.naviUser = localStorage.getItem('naviUser') || this.naviUser || '';
+            this.naviPass = this.rememberCredentials ? (localStorage.getItem('naviPass') || this.naviPass || '') : '';
+            if (localStorage.getItem('naviSync') !== null) {
+                this.naviSync = localStorage.getItem('naviSync') === 'true';
             }
         },
         
@@ -313,10 +381,10 @@ function appData() {
         
         shouldShowStatusBanner() {
             if (this.statusDisplayMode === 'always') return true;
-            // In errors_only mode, only show if a configured service explicitly failed its connection test
-            const naviError = this.naviUrl && this.naviStatus.tested && !this.naviStatus.ok;
-            const slskdError = this.slskdUrl && this.slskdStatus.tested && !this.slskdStatus.ok;
-            return Boolean(naviError || slskdError);
+            // shortcut: enforces both Navidrome and Soulseek to be logged in before hiding banner in 'not_logged_or_error' mode, per user specification
+            const naviNotReady = !this.naviUrl || !this.naviUser || !this.naviPass || !this.naviStatus.ok;
+            const slskdNotReady = !this.slskdUrl || !this.slskdUser || !this.slskdPass || !this.slskdStatus.ok;
+            return Boolean(naviNotReady || slskdNotReady);
         },
 
         async testNavidrome() {
@@ -364,14 +432,15 @@ function appData() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         url: this.slskdUrl,
-                        api_key: this.slskdApiKey
+                        username: this.slskdUser,
+                        password: this.slskdPass
                     })
                 });
                 const data = await res.json();
                 this.slskdStatus = {
                     tested: true,
                     ok: !!data.ok,
-                    msg: data.message || (data.ok ? 'Połączono pomyślnie z Soulseek (slskd)!' : 'Błąd połączenia')
+                    msg: data.message || (data.ok ? 'Połączono i zalogowano pomyślnie do Soulseek (slskd)!' : 'Błąd połączenia')
                 };
             } catch (e) {
                 this.slskdStatus = {
@@ -418,7 +487,8 @@ function appData() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         slskd_url: this.slskdUrl,
-                        slskd_api_key: this.slskdApiKey,
+                        slskd_user: this.slskdUser,
+                        slskd_pass: this.slskdPass,
                         navi_sync: this.naviSync,
                         navi_url: this.naviUrl,
                         navi_user: this.naviUser,

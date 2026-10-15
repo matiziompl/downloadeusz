@@ -74,6 +74,8 @@ class NaviTestRequest(BaseModel):
 
 class SlskdTestRequest(BaseModel):
     url: str
+    username: str = ""
+    password: str = ""
     api_key: str = ""
 
 @app.post("/api/test/navidrome")
@@ -109,28 +111,42 @@ async def test_slskd(req: SlskdTestRequest):
         return {"ok": False, "message": "Brak adresu URL Soulseek (slskd)"}
     try:
         import urllib.request
+        import urllib.error
         slskd_url = req.url
         if not slskd_url.startswith(('http://', 'https://')):
             slskd_url = f"http://{slskd_url}"
 
-        api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
-        headers = {}
-        if req.api_key:
-            headers["X-API-Key"] = req.api_key
+        from slskd_organizer import get_slskd_auth_header
+        headers = get_slskd_auth_header(
+            slskd_url,
+            username=req.username,
+            password=req.password,
+            api_key=req.api_key,
+            timeout=5
+        )
 
+        api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
         request_obj = urllib.request.Request(api_url, headers=headers)
         with urllib.request.urlopen(request_obj, timeout=5) as response:
             status_code = getattr(response, "status", None)
             if status_code is None and hasattr(response, "getcode"):
                 status_code = response.getcode()
             if status_code is None or status_code == 200:
-                return {"ok": True, "message": "Połączono pomyślnie z Soulseek (slskd)!"}
+                return {"ok": True, "message": "Połączono i zalogowano pomyślnie do Soulseek (slskd)!"}
             return {"ok": False, "message": f"Odpowiedź serwera: {status_code}"}
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {"ok": False, "message": "Błąd autoryzacji Soulseek (slskd): Nieprawidłowy login lub hasło"}
+        return {"ok": False, "message": f"Błąd Soulseek (slskd): HTTP {e.code}"}
+    except RuntimeError as e:
+        return {"ok": False, "message": str(e)}
     except Exception as e:
         return {"ok": False, "message": f"Nie udało się połączyć z Soulseek (slskd): {str(e)}"}
 
 class SlskdOrganizeRequest(BaseModel):
     slskd_url: str
+    slskd_user: str = ""
+    slskd_pass: str = ""
     slskd_api_key: str = ""
     navi_sync: bool = False
     navi_url: str = ""
@@ -150,6 +166,8 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             res = organize_slskd_downloads(
                 slskd_url=request.slskd_url,
                 slskd_api_key=request.slskd_api_key,
+                slskd_username=request.slskd_user,
+                slskd_password=request.slskd_pass,
                 source_dir=SLSKD_DOWNLOADS_DIR,
                 dest_dir=DOWNLOADS_DIR,
                 log_callback=log_cb

@@ -1,6 +1,6 @@
 <div align="center">
   <img src="frontend/assets/logo_small.png" alt="Downloadeusz Logo" width="150" />
-  <h1>Downloadeusz (v2.0)</h1>
+  <h1>Downloadeusz (v2.1)</h1>
   <p><strong>A modern, self-hosted Web UI for SpotDL, yt-dlp, and Soulseek (slskd) with deep Navidrome integration</strong></p>
 </div>
 
@@ -8,15 +8,16 @@
 
 **Downloadeusz** is a lightweight, Dockerized web application that allows you to easily download music (individual tracks, entire albums, and massive playlists from Spotify and YouTube) directly to your home server (e.g., NAS / Raspberry Pi).
 
-The standout features of Downloadeusz are its **direct integration with Navidrome via the Subsonic API** and **Soulseek (slskd) library organization**. The app bypasses the common read-only `.m3u` playlist limitation by translating downloaded files into internal Navidrome IDs and generating native playlists. In v2.0, it automatically checks Navidrome before downloading to prevent redownloading high-quality tracks (e.g., FLACs) and can organize your Soulseek downloads into the same uniform folder hierarchy.
+The standout features of Downloadeusz are its **direct integration with Navidrome via the Subsonic API** and **Soulseek (slskd) library organization**. The app bypasses the common read-only `.m3u` playlist limitation by translating downloaded files into internal Navidrome IDs and generating native playlists. In v2.1, it automatically checks Navidrome before downloading to prevent redownloading high-quality tracks (e.g., FLACs), organizes Soulseek downloads into the same uniform folder hierarchy with simple account login, and saves credentials in your browser's local storage so container restarts never wipe your settings.
 
 ## ✨ Key Features
 
 - 🎨 **Modern & Responsive (Bento UI)**: Designed with a sleek Glassmorphism aesthetic. It looks stunning on both mobile devices and desktops. Fully customizable (custom wallpapers, background blur intensity, gradient saturation, and accent colors).
 - 🎵 **SpotDL & YT-DLP Under the Hood**: Download from YouTube, YouTube Music, Spotify, and Soundcloud while preserving full metadata (album art, ID3 tags).
-- 🔄 **Soulseek (slskd) Auto-Organizer**: Automatically pulls completed downloads from your slskd daemon, parses audio tags (FLAC, MP3, M4A) via `mutagen`, and moves them into `{artist}/{year} - {album}/{track} {title}.{ext}`, then notifies Navidrome!
+- 🔄 **Soulseek (slskd) Auto-Organizer**: Automatically pulls completed downloads from your slskd daemon using your account login (`slskd`/`slskd`), parses audio tags (FLAC, MP3, M4A) via `mutagen`, and moves them into `{artist}/{year} - {album}/{track} {title}.{ext}`, then notifies Navidrome!
 - 🔍 **Smart Navidrome Deduplication**: Automatically queries Navidrome before downloading Spotify/YouTube tracks. Skip songs already in your library (toggle between "FLAC / Lossless only" or "Any format").
 - 📡 **Live Terminal (SSE) & Status Bar**: Monitor downloads and Soulseek organization in real-time. Instant connection test buttons and health status indicators for Navidrome and slskd.
+- 💾 **Client Credentials Persistence**: Credentials and settings are safely stored in your browser's `localStorage` — restarting or updating the Docker container won't make you type them again.
 - 🎶 **Native Navidrome Playlists**: Downloadeusz translates temporary `.m3u` files into internal Navidrome IDs and creates fully editable native playlists.
 - ⚠️ **Smart Error Handling**: A slide-out panel alerts you if a specific song couldn't be found, with direct links to the original track.
 
@@ -69,11 +70,13 @@ docker compose up --build -d
 2. **Navidrome Integration**:
    - Enter your Navidrome `URL` (e.g., `http://your-server-ip:4533`), `Username`, and `Password`.
    - Click **"Testuj połączenie"** to verify connectivity.
-   - (Optional) Toggle "Public playlist" for shared playlists.
+   - (Optional) Toggle "Wymuś skanowanie i usuń .m3u".
 3. **Soulseek (slskd) Integration**:
-   - Enter your slskd `URL` (e.g., `http://your-server-ip:5030`) and `API Key`.
-   - Click **"Testuj połączenie"** to verify access to transfers.
-   - Click **"Uporządkuj pliki z Soulseeka"** to import and organize downloaded FLAC/MP3 files into your library.
+   - Enter your slskd `URL` (e.g., `http://your-server-ip:5030`), `Username` (default: `slskd`), and `Password` (default: `slskd`).
+   - Click **"Testuj połączenie"** to verify login and transfers access.
+   - Click **"Uporządkuj pliki"** under the link tile to import and organize downloaded FLAC/MP3 files into your library.
+4. **Client Credentials**:
+   - Make sure "Zapamiętaj dane logowania i hasła na tym urządzeniu" is checked (default: ON) so you never need to re-type passwords after container restarts.
 
 ## 🛠️ Tech Stack
 - **Backend:** Python (FastAPI, asyncio, Uvicorn, Mutagen, Subsonic & slskd API clients)

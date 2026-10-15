@@ -4,6 +4,7 @@ import json
 import shutil
 import urllib.request
 import urllib.parse
+import urllib.error
 from typing import Dict, List, Any, Optional, Callable
 import mutagen
 
@@ -130,12 +131,57 @@ def clean_empty_directories(directory: str):
         except Exception:
             pass
 
+def get_slskd_auth_header(
+    slskd_url: str,
+    username: str = "",
+    password: str = "",
+    api_key: str = "",
+    timeout: int = 10
+) -> Dict[str, str]:
+    """
+    Generate authentication headers for slskd.
+    Authenticates via POST /api/v0/session if username or password are provided.
+    Supports static API key via X-API-Key if api_key is provided.
+    Returns empty dict if no auth credentials are provided.
+    """
+    if not slskd_url.startswith(('http://', 'https://')):
+        slskd_url = f"http://{slskd_url}"
+
+    if username or password:
+        session_url = f"{slskd_url.rstrip('/')}/api/v0/session"
+        payload = json.dumps({"username": username, "password": password}).encode('utf-8')
+        req = urllib.request.Request(
+            session_url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                token = data.get("token")
+                if not token:
+                    raise RuntimeError("Brak tokenu autoryzacyjnego w odpowiedzi serwera Soulseek (slskd)")
+                return {"Authorization": f"Bearer {token}"}
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise RuntimeError("Błąd logowania do Soulseek (slskd): nieprawidłowy login lub hasło")
+            raise RuntimeError(f"Błąd logowania do Soulseek (slskd): HTTP {e.code} - {e.reason}")
+        except Exception as e:
+            raise RuntimeError(f"Nie udało się połączyć z serwerem logowania Soulseek (slskd): {e}")
+
+    if api_key:
+        return {"X-API-Key": api_key}
+
+    return {}
+
 def organize_slskd_downloads(
     slskd_url: str,
-    slskd_api_key: str,
-    source_dir: str,
-    dest_dir: str,
-    log_callback: Optional[Callable[[str], None]] = None
+    slskd_api_key: str = "",
+    source_dir: str = "/slskd_downloads",
+    dest_dir: str = "/music",
+    log_callback: Optional[Callable[[str], None]] = None,
+    slskd_username: str = "",
+    slskd_password: str = ""
 ) -> Dict[str, Any]:
     """Fetch completed downloads from slskd API, read audio tags, and organize them into dest_dir."""
     def log(msg: str):
@@ -151,12 +197,23 @@ def organize_slskd_downloads(
     if not slskd_url.startswith(('http://', 'https://')):
         slskd_url = f"http://{slskd_url}"
 
-    # 1. Fetch completed transfers from slskd
-    api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
-    headers = {}
-    if slskd_api_key:
-        headers["X-API-Key"] = slskd_api_key
+    # 1. Authenticate and prepare headers
+    try:
+        headers = get_slskd_auth_header(
+            slskd_url,
+            username=slskd_username,
+            password=slskd_password,
+            api_key=slskd_api_key,
+            timeout=15
+        )
+    except Exception as e:
+        err_msg = f"Błąd autoryzacji Soulseek (slskd): {e}"
+        log(f"[Soulseek] {err_msg}")
+        stats["errors"].append(err_msg)
+        return stats
 
+    # 2. Fetch completed transfers from slskd
+    api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
     log(f"[Soulseek] Pobieranie listy transferów z {api_url}...")
     try:
         req = urllib.request.Request(api_url, headers=headers)

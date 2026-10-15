@@ -130,10 +130,61 @@ def test_start_slskd_organize_endpoint():
     with patch("backend.main.run_slskd_organize_task"):
         res = client.post("/api/slskd/organize", json={
             "slskd_url": "http://slskd:5030",
-            "slskd_api_key": "abc"
+            "slskd_user": "slskd",
+            "slskd_pass": "slskd"
         })
         assert res.status_code == 200
         data = res.json()
         assert data["status"] == "started"
         assert "task_id" in data
+
+def test_organize_slskd_with_login_credentials(tmp_path):
+    source_dir = tmp_path / "slskd"
+    dest_dir = tmp_path / "music"
+    source_dir.mkdir()
+    dest_dir.mkdir()
+
+    track_file = source_dir / "test.mp3"
+    track_file.write_text("audio data")
+
+    # Mock session login response
+    mock_session_resp = MagicMock()
+    mock_session_resp.read.return_value = json.dumps({"token": "jwt-test-xyz"}).encode("utf-8")
+    mock_session_resp.__enter__.return_value = mock_session_resp
+
+    # Mock transfers list response
+    mock_transfers_resp = MagicMock()
+    mock_transfers_resp.status = 200
+    mock_transfers_resp.getcode.return_value = 200
+    mock_transfers_resp.read.return_value = json.dumps([
+        {
+            "filename": "test.mp3",
+            "state": "Completed, Succeeded"
+        }
+    ]).encode("utf-8")
+    mock_transfers_resp.__enter__.return_value = mock_transfers_resp
+
+    mock_tags = {
+        "artist": ["Radiohead"],
+        "album": ["OK Computer"],
+        "date": ["1997"],
+        "tracknumber": ["1"],
+        "title": ["Airbag"]
+    }
+
+    with patch("urllib.request.urlopen", side_effect=[mock_session_resp, mock_transfers_resp]), \
+         patch("mutagen.File", return_value=mock_tags):
+        
+        result = organize_slskd_downloads(
+            slskd_url="http://slskd:5030",
+            slskd_username="slskd_user",
+            slskd_password="secret_password",
+            source_dir=str(source_dir),
+            dest_dir=str(dest_dir)
+        )
+
+        assert result["organized"] == 1
+        expected = dest_dir / "Radiohead" / "1997 - OK Computer" / "01 Airbag.mp3"
+        assert expected.exists()
+
 
