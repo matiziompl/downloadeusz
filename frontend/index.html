@@ -114,19 +114,44 @@
 
              <!-- Navidrome Integration -->
              <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
-                 <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">
-                     <i class="ph ph-music-notes"></i> Integracja z Navidrome
-                 </h3>
+                 <div class="flex items-center justify-between mb-4">
+                     <h3 class="text-lg font-medium text-white/80 flex items-center gap-2">
+                         <i class="ph ph-music-notes"></i> Integracja z Navidrome
+                     </h3>
+                     <button @click="fetchAccounts()" type="button" title="Odśwież konta" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-white/70 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs">
+                         <i class="ph ph-arrows-clockwise text-sm"></i>
+                         <span>Odśwież</span>
+                     </button>
+                 </div>
                  <div class="space-y-4">
-                     <input type="text" x-model="naviUrl" placeholder="URL (np. http://twoj-serwer:4533)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
-                     <input type="text" x-model="naviUser" placeholder="Nazwa użytkownika" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
-                     <input type="password" x-model="naviPass" placeholder="Hasło" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
+                     <!-- Alert if no accounts found -->
+                     <div x-show="naviAccounts.length === 0" class="text-xs p-3 rounded-xl border bg-amber-500/10 text-amber-300 border-amber-500/20 flex items-center gap-2.5">
+                         <i class="ph ph-info text-base flex-shrink-0"></i>
+                         <span>Brak kont w navidrome_accounts.txt. Dodaj konta do pliku.</span>
+                     </div>
+
+                     <!-- Account Selector Dropdown -->
+                     <div x-show="naviAccounts.length > 0" class="space-y-1.5">
+                         <label class="text-xs text-white/60 font-medium block">Wybierz konto:</label>
+                         <div class="relative">
+                             <select x-model="selectedNaviAccount" class="w-full appearance-none bg-black/50 border border-white/10 rounded-xl px-4 py-2.5 pr-10 text-sm text-white outline-none focus:border-white/30 transition-colors cursor-pointer">
+                                 <template x-for="acc in naviAccounts" :key="acc.id">
+                                     <option :value="acc.id" x-text="`${acc.username} (${acc.server})`" class="bg-neutral-900 text-white"></option>
+                                 </template>
+                             </select>
+                             <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-white/40">
+                                 <i class="ph ph-caret-down text-base"></i>
+                             </div>
+                         </div>
+                     </div>
+
                      <label class="flex items-center gap-3 cursor-pointer mt-2 group">
                          <input type="checkbox" x-model="naviSync" class="sr-only peer">
                          <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="naviSync ? `background-color: ${getEffectiveColor()}` : ''"></div>
                          <span class="text-sm font-medium text-white/80 group-hover:text-white transition-colors">Wymuś skanowanie i usuń .m3u</span>
                      </label>
-                     <button @click="testNavidrome()" :disabled="testingNavi" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+
+                     <button @click="testNavidrome()" :disabled="testingNavi || !selectedNaviAccount" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
                          <i class="ph ph-spinner animate-spin text-sm" x-show="testingNavi" style="display: none;"></i>
                          <i class="ph ph-plugs text-sm" x-show="!testingNavi"></i>
                          <span>Testuj połączenie</span>
@@ -140,14 +165,35 @@
 
              <!-- Soulseek (slskd) Integration -->
              <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
-                 <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">
-                     <i class="ph ph-waveform"></i> Integracja z Soulseek (slskd)
-                 </h3>
+                 <div class="flex items-center justify-between mb-4">
+                     <h3 class="text-lg font-medium text-white/80 flex items-center gap-2">
+                         <i class="ph ph-waveform"></i> Integracja z Soulseek (slskd)
+                     </h3>
+                     <button @click="fetchAccounts()" type="button" title="Odśwież konfigurację" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-white/70 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs">
+                         <i class="ph ph-arrows-clockwise text-sm"></i>
+                         <span>Odśwież</span>
+                     </button>
+                 </div>
                  <div class="space-y-4">
-                     <input type="text" x-model="slskdUrl" placeholder="np. http://localhost:5030" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
-                     <input type="text" x-model="slskdUser" placeholder="Nazwa użytkownika (domyślnie: slskd)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
-                     <input type="password" x-model="slskdPass" placeholder="Hasło (domyślnie: slskd)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
-                     <button @click="testSlskd()" :disabled="testingSlskd" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                     <!-- Configured Card -->
+                     <div x-show="slskdAccount.configured" class="bg-black/30 rounded-xl p-3.5 border border-white/10 space-y-2">
+                         <div class="flex items-center justify-between text-xs">
+                             <span class="text-white/50">Serwer</span>
+                             <span class="font-mono font-medium text-white/90 truncate ml-2 max-w-[200px]" x-text="slskdAccount.server"></span>
+                         </div>
+                         <div class="flex items-center justify-between text-xs">
+                             <span class="text-white/50">Użytkownik</span>
+                             <span class="font-mono font-medium text-white/90 truncate ml-2" x-text="slskdAccount.username"></span>
+                         </div>
+                     </div>
+
+                     <!-- Not Configured Alert -->
+                     <div x-show="!slskdAccount.configured" class="text-xs p-3 rounded-xl border bg-amber-500/10 text-amber-300 border-amber-500/20 flex items-center gap-2.5">
+                         <i class="ph ph-info text-base flex-shrink-0"></i>
+                         <span>Brak konfiguracji w slskd_accounts.txt.</span>
+                     </div>
+
+                     <button @click="testSlskd()" :disabled="testingSlskd || !slskdAccount.configured" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
                          <i class="ph ph-spinner animate-spin text-sm" x-show="testingSlskd" style="display: none;"></i>
                          <i class="ph ph-plugs text-sm" x-show="!testingSlskd"></i>
                          <span>Testuj połączenie</span>
@@ -315,18 +361,18 @@
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
                                       :class="{
-                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !naviUrl || !naviUser || !naviPass || (!naviStatus.tested && !testingNavi),
+                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !selectedNaviAccount || (!naviStatus.tested && !testingNavi),
                                           'bg-amber-400 animate-pulse': testingNavi,
-                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': !testingNavi && naviUrl && naviUser && naviPass && naviStatus.tested && naviStatus.ok,
-                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': !testingNavi && naviUrl && naviUser && naviPass && naviStatus.tested && !naviStatus.ok
+                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': !testingNavi && selectedNaviAccount && naviStatus.tested && naviStatus.ok,
+                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': !testingNavi && selectedNaviAccount && naviStatus.tested && !naviStatus.ok
                                       }"></span>
                                 <span class="text-xs sm:text-sm font-medium text-white/90 truncate"
                                       :title="naviStatus.msg || ''"
-                                      x-text="!naviUrl || !naviUser || !naviPass ? 'Navidrome: Niezalogowany' : (testingNavi ? 'Navidrome: Łączenie...' : (naviStatus.tested ? (naviStatus.ok ? 'Navidrome: Zalogowano' : 'Navidrome: Błąd połączenia') : 'Navidrome: Niezalogowany'))">
+                                      x-text="!selectedNaviAccount ? 'Navidrome: Niewybrane konto' : (testingNavi ? `${selectedNaviUsername}: Łączenie...` : (naviStatus.tested ? (naviStatus.ok ? `${selectedNaviUsername}: Zalogowano` : `${selectedNaviUsername}: Błąd połączenia`) : `${selectedNaviUsername}: Niezalogowany`))">
                                 </span>
                             </div>
                             <button @click="testNavidrome()" 
-                                    :disabled="testingNavi" 
+                                    :disabled="testingNavi || !selectedNaviAccount" 
                                     title="Testuj połączenie z Navidrome"
                                     class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed">
                                 <i class="ph ph-spinner animate-spin text-sm" x-show="testingNavi" style="display: none;"></i>
@@ -340,19 +386,19 @@
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
                                       :class="{
-                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !slskdUrl || !slskdUser || !slskdPass || (!slskdStatus.tested && !testingSlskd),
+                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !slskdAccount.configured || (!slskdStatus.tested && !testingSlskd),
                                           'bg-amber-400 animate-pulse': testingSlskd,
-                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': !testingSlskd && slskdUrl && slskdUser && slskdPass && slskdStatus.tested && slskdStatus.ok,
-                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': !testingSlskd && slskdUrl && slskdUser && slskdPass && slskdStatus.tested && !slskdStatus.ok
+                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': !testingSlskd && slskdAccount.configured && slskdStatus.tested && slskdStatus.ok,
+                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': !testingSlskd && slskdAccount.configured && slskdStatus.tested && !slskdStatus.ok
                                       }"></span>
                                 <span class="text-xs sm:text-sm font-medium text-white/90 truncate"
                                       :title="slskdStatus.msg || ''"
-                                      x-text="!slskdUrl || !slskdUser || !slskdPass ? 'Soulseek: Niezalogowany' : (testingSlskd ? 'Soulseek: Łączenie...' : (slskdStatus.tested ? (slskdStatus.ok ? 'Soulseek: Zalogowano' : 'Soulseek: Błąd połączenia') : 'Soulseek: Niezalogowany'))">
+                                      x-text="!slskdAccount.configured ? 'Soulseek: Nieskonfigurowany' : (testingSlskd ? `Soulseek: ${slskdAccount.username} (Łączenie...)` : (slskdStatus.tested ? (slskdStatus.ok ? `Soulseek: ${slskdAccount.username} (Zalogowano)` : `Soulseek: ${slskdAccount.username} (Błąd połączenia)`) : `Soulseek: ${slskdAccount.username} (Niezalogowany)`))">
                                 </span>
                             </div>
                             <div class="flex items-center gap-1.5 flex-wrap self-start sm:self-auto">
                                 <button @click="testSlskd()" 
-                                        :disabled="testingSlskd" 
+                                        :disabled="testingSlskd || !slskdAccount.configured" 
                                         title="Testuj połączenie z Soulseek"
                                         class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i class="ph ph-spinner animate-spin text-sm" x-show="testingSlskd" style="display: none;"></i>
@@ -360,7 +406,7 @@
                                     <span>Testuj</span>
                                 </button>
                                 <button @click="organizeSlskd()" 
-                                        :disabled="organizingSlskd" 
+                                        :disabled="organizingSlskd || !slskdAccount.configured" 
                                         title="Uporządkuj pliki pobrane z Soulseek"
                                         class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i class="ph ph-spinner animate-spin text-sm" x-show="organizingSlskd" style="display: none;"></i>
@@ -521,6 +567,15 @@
                     <div class="font-mono text-xs text-white/70 break-words whitespace-pre-wrap leading-relaxed opacity-80" x-text="getCommandPreview()"></div>
                 </div>
 
+                <!-- SpotDL Fetch Metadata Only Button -->
+                <button x-show="selectedTool === 'spotdl'" 
+                        @click="fetchSpotifyMetadata()" 
+                        :disabled="!url || fetchingMeta" 
+                        class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed mb-4">
+                    <i class="ph text-base" :class="fetchingMeta ? 'ph-spinner animate-spin' : 'ph-tag'"></i>
+                    <span x-text="fetchingMeta ? 'Pobieranie metadanych...' : 'Pobierz same metadane'"></span>
+                </button>
+
                 <!-- Action Button -->
                 <button @click="startDownload()" 
                         class="w-full py-4 rounded-2xl font-bold text-lg shadow-xl hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -536,6 +591,88 @@
                      class="mt-6 p-4 rounded-xl text-sm font-medium text-center border"
                      :class="statusError ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'"
                      x-text="statusMsg" style="display: none;">
+                </div>
+
+            </div>
+
+            <!-- Spotify Metadata Preview Bento Card -->
+            <div x-show="spotifyMetadata" 
+                 x-transition:enter="transition ease-out duration-300" 
+                 x-transition:enter-start="opacity-0 translate-y-3" 
+                 x-transition:enter-end="opacity-100 translate-y-0" 
+                 x-transition:leave="transition ease-in duration-200" 
+                 x-transition:leave-start="opacity-100 translate-y-0" 
+                 x-transition:leave-end="opacity-0 -translate-y-2" 
+                 class="bento-box p-6 w-full mb-6" 
+                 style="display: none;">
+                
+                <!-- Card Header -->
+                <div class="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
+                    <span class="text-xs font-mono text-white/60 uppercase tracking-wider flex items-center gap-2">
+                        <i class="ph ph-tag text-sm" :style="`color: ${getEffectiveColor()}`"></i> Metadane utworu (Spotify)
+                    </span>
+                    <button @click="spotifyMetadata = null" type="button" title="Zamknij podgląd" class="p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                        <i class="ph ph-x text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Track Details Row -->
+                <div class="flex items-center gap-4 mb-5">
+                    <!-- Cover Art (64x64 rounded-xl) -->
+                    <template x-if="spotifyMetadata && spotifyMetadata.cover_url">
+                        <img :src="spotifyMetadata.cover_url" alt="Okładka albumu" class="w-16 h-16 rounded-xl object-cover bg-black/40 border border-white/10 shadow-md flex-shrink-0">
+                    </template>
+                    <template x-if="spotifyMetadata && !spotifyMetadata.cover_url">
+                        <div class="w-16 h-16 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center text-white/40 shadow-md flex-shrink-0">
+                            <i class="ph ph-music-notes text-2xl"></i>
+                        </div>
+                    </template>
+
+                    <!-- Track Metadata Info -->
+                    <div class="min-w-0 flex-1">
+                        <h4 class="font-bold text-base sm:text-lg text-white/95 truncate leading-tight mb-1" x-text="spotifyMetadata ? spotifyMetadata.title : ''"></h4>
+                        <p class="text-xs sm:text-sm text-white/70 truncate mb-2">
+                            <span x-text="spotifyMetadata ? spotifyMetadata.artist : ''"></span>
+                            <span class="text-white/40 mx-1.5" x-show="spotifyMetadata && spotifyMetadata.album">&bull;</span>
+                            <span x-text="spotifyMetadata ? spotifyMetadata.album : ''"></span>
+                        </p>
+                        
+                        <!-- Badges: Year & Track Number & Total Tracks -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span x-show="spotifyMetadata && spotifyMetadata.year" 
+                                  class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-white/80 border border-white/10"
+                                  x-text="spotifyMetadata ? spotifyMetadata.year : ''"></span>
+                            <span x-show="spotifyMetadata && spotifyMetadata.track_number" 
+                                  class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-white/80 border border-white/10"
+                                  x-text="spotifyMetadata ? ('Ścieżka ' + spotifyMetadata.track_number) : ''"></span>
+                            <span x-show="spotifyMetadata && spotifyMetadata.total_tracks > 1" 
+                                  class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                                  x-text="spotifyMetadata ? `Utwór 1 z ${spotifyMetadata.total_tracks}` : ''"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FFmpeg Command Preview Section -->
+                <div class="space-y-2 mb-4">
+                    <p class="text-[10px] uppercase font-bold text-white/50 tracking-wider flex items-center gap-1.5">
+                        <i class="ph ph-terminal"></i> Wygenerowana komenda FFmpeg (tagowanie)
+                    </p>
+                    <div class="font-mono text-xs bg-black/60 p-3.5 rounded-xl border border-white/10 break-words whitespace-pre-wrap leading-relaxed text-emerald-400/90 select-all custom-scrollbar max-h-32 overflow-y-auto"
+                         x-text="spotifyMetadata ? spotifyMetadata.command : ''"></div>
+                </div>
+
+                <!-- Action Button & Feedback -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <button @click="copyMetadataCommand()" 
+                            type="button"
+                            class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 border active:scale-[0.98]"
+                            :class="copiedMetaCommand ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-white/10 hover:bg-white/15 text-white border-white/10'">
+                        <i class="ph text-base" :class="copiedMetaCommand ? 'ph-check text-emerald-400' : 'ph-copy'"></i>
+                        <span x-text="copiedMetaCommand ? 'Skopiowano i wklejono do konsoli!' : 'Kopiuj komendę FFmpeg'"></span>
+                    </button>
+                    <span x-show="copiedMetaCommand" x-transition class="text-xs text-emerald-400/90 font-medium flex items-center gap-1">
+                        <i class="ph ph-check-circle"></i> Gotowe do uruchomienia w terminalu
+                    </span>
                 </div>
 
             </div>

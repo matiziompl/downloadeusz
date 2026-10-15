@@ -14,10 +14,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 try:
-    from backend import navidrome_dedup, slskd_organizer
+    from backend import navidrome_dedup, slskd_organizer, accounts, spotify_meta
 except ImportError:
     import navidrome_dedup
     import slskd_organizer
+    import accounts
+    import spotify_meta
+
 
 app = FastAPI()
 
@@ -74,31 +77,88 @@ class DownloadRequest(BaseModel):
     tool: str # 'ytdl' or 'spotdl'
     url: str
     flags: dict = {}
+    navi_account_id: str = ""
     navi_url: str = ""
     navi_user: str = ""
     navi_pass: str = ""
     navi_sync: bool = False
 
 class NaviTestRequest(BaseModel):
-    url: str
+    account_id: str = ""
+    url: str = ""
     user: str = ""
     password: str = ""
 
 class SlskdTestRequest(BaseModel):
-    url: str
+    url: str = ""
     username: str = ""
     password: str = ""
     api_key: str = ""
 
+class SpotifyMetaRequest(BaseModel):
+    url: str
+
+class SlskdOrganizeRequest(BaseModel):
+    slskd_url: str = ""
+    slskd_user: str = ""
+    slskd_pass: str = ""
+    slskd_api_key: str = ""
+    navi_sync: bool = False
+    navi_account_id: str = ""
+    navi_url: str = ""
+    navi_user: str = ""
+    navi_pass: str = ""
+
+@app.get("/api/accounts/navidrome")
+async def get_navidrome_accounts_endpoint():
+    accs = accounts.get_navidrome_accounts(SPOTDL_CONFIG_DIR)
+    safe_accs = [
+        {"id": a["id"], "server": a["server"], "username": a["username"]}
+        for a in accs
+    ]
+    return {"accounts": safe_accs}
+
+@app.get("/api/accounts/slskd")
+async def get_slskd_account_endpoint():
+    acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+    if acc:
+        return {"configured": True, "server": acc["server"], "username": acc["username"]}
+    return {"configured": False}
+
+@app.post("/api/spotify/metadata")
+async def get_spotify_metadata_endpoint(req: SpotifyMetaRequest):
+    res = spotify_meta.fetch_spotify_metadata(
+        url=req.url,
+        downloads_dir=DOWNLOADS_DIR,
+        config_dir=SPOTDL_CONFIG_DIR
+    )
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("message", "Błąd pobierania metadanych"))
+    return res
+
 @app.post("/api/test/navidrome")
 async def test_navidrome(req: NaviTestRequest):
-    if not req.url:
-        return {"ok": False, "message": "Brak adresu URL Navidrome"}
+    url = req.url
+    user = req.user
+    password = req.password
+
+    # If account_id provided or password empty, lookup from navidrome_accounts.txt
+    if (req.account_id or not password):
+        lookup_id = req.account_id or req.user
+        if lookup_id:
+            acc = accounts.get_navidrome_account_by_id(lookup_id, SPOTDL_CONFIG_DIR)
+            if acc:
+                url = acc.get("server") or url
+                user = acc.get("username") or user
+                password = acc.get("password") or password
+
+    if not url:
+        return {"ok": False, "message": "Brak wybranego konta lub adresu URL Navidrome"}
     try:
         data = navidrome_dedup.subsonic_request(
-            base_url=req.url,
-            user=req.user,
-            password=req.password,
+            base_url=url,
+            user=user,
+            password=password,
             endpoint="ping.view",
             timeout=5
         )
@@ -107,7 +167,7 @@ async def test_navidrome(req: NaviTestRequest):
             server_version = sub_resp.get("serverVersion", sub_resp.get("version", ""))
             return {
                 "ok": True,
-                "message": "Połączono pomyślnie z Navidrome!",
+                "message": f"Połączono pomyślnie z Navidrome ({user})!",
                 "server_version": server_version
             }
         else:
@@ -118,20 +178,33 @@ async def test_navidrome(req: NaviTestRequest):
 
 @app.post("/api/test/slskd")
 async def test_slskd(req: SlskdTestRequest):
-    if not req.url:
-        return {"ok": False, "message": "Brak adresu URL Soulseek (slskd)"}
+    url = req.url
+    username = req.username
+    password = req.password
+    api_key = req.api_key
+
+    # If credentials not provided, auto-load active account from slskd_accounts.txt
+    if not password and not api_key:
+        acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+        if acc:
+            url = url or acc.get("server", "")
+            username = username or acc.get("username", "")
+            password = acc.get("password", "")
+
+    if not url:
+        return {"ok": False, "message": "Brak skonfigurowanego konta Soulseek (slskd) w slskd_accounts.txt"}
     try:
         import urllib.request
         import urllib.error
-        slskd_url = req.url
+        slskd_url = url
         if not slskd_url.startswith(('http://', 'https://')):
             slskd_url = f"http://{slskd_url}"
 
         headers = slskd_organizer.get_slskd_auth_header(
             slskd_url,
-            username=req.username,
-            password=req.password,
-            api_key=req.api_key,
+            username=username,
+            password=password,
+            api_key=api_key,
             timeout=5
         )
 
@@ -142,7 +215,7 @@ async def test_slskd(req: SlskdTestRequest):
             if status_code is None and hasattr(response, "getcode"):
                 status_code = response.getcode()
             if status_code is None or status_code == 200:
-                return {"ok": True, "message": "Połączono i zalogowano pomyślnie do Soulseek (slskd)!"}
+                return {"ok": True, "message": f"Połączono i zalogowano pomyślnie do Soulseek ({username or 'slskd'})!"}
             return {"ok": False, "message": f"Odpowiedź serwera: {status_code}"}
     except urllib.error.HTTPError as e:
         if e.code == 401:
@@ -153,15 +226,6 @@ async def test_slskd(req: SlskdTestRequest):
     except Exception as e:
         return {"ok": False, "message": f"Nie udało się połączyć z Soulseek (slskd): {str(e)}"}
 
-class SlskdOrganizeRequest(BaseModel):
-    slskd_url: str
-    slskd_user: str = ""
-    slskd_pass: str = ""
-    slskd_api_key: str = ""
-    navi_sync: bool = False
-    navi_url: str = ""
-    navi_user: str = ""
-    navi_pass: str = ""
 
 def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
@@ -172,11 +236,32 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
 
         log_cb("=== Rozpoczynanie porządkowania plików Soulseek (slskd) ===")
         try:
+            slskd_url = request.slskd_url
+            slskd_user = request.slskd_user
+            slskd_pass = request.slskd_pass
+            slskd_api_key = request.slskd_api_key
+            if not slskd_url or (not slskd_pass and not slskd_api_key):
+                acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+                if acc:
+                    slskd_url = slskd_url or acc.get("server", "")
+                    slskd_user = slskd_user or acc.get("username", "")
+                    slskd_pass = acc.get("password", "")
+
+            navi_url = request.navi_url
+            navi_user = request.navi_user
+            navi_pass = request.navi_pass
+            if request.navi_sync and (request.navi_account_id or not navi_pass):
+                n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, SPOTDL_CONFIG_DIR)
+                if n_acc:
+                    navi_url = n_acc.get("server", navi_url)
+                    navi_user = n_acc.get("username", navi_user)
+                    navi_pass = n_acc.get("password", navi_pass)
+
             res = slskd_organizer.organize_slskd_downloads(
-                slskd_url=request.slskd_url,
-                slskd_api_key=request.slskd_api_key,
-                slskd_username=request.slskd_user,
-                slskd_password=request.slskd_pass,
+                slskd_url=slskd_url,
+                slskd_api_key=slskd_api_key,
+                slskd_username=slskd_user,
+                slskd_password=slskd_pass,
                 source_dir=SLSKD_DOWNLOADS_DIR,
                 dest_dir=DOWNLOADS_DIR,
                 log_callback=log_cb
@@ -184,13 +269,13 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             log_cb(f"\n[Uprawnienia] Ustawianie praw dostępu (PUID:PGID {PUID}:{PGID})...")
             fix_download_permissions(DOWNLOADS_DIR)
 
-            if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
+            if request.navi_sync and navi_url and navi_user and navi_pass:
                 log_cb("\n[Navidrome] Uruchamianie skanowania biblioteki po uporządkowaniu...")
                 try:
                     navidrome_dedup.subsonic_request(
-                        base_url=request.navi_url,
-                        user=request.navi_user,
-                        password=request.navi_pass,
+                        base_url=navi_url,
+                        user=navi_user,
+                        password=navi_pass,
                         endpoint="startScan.view",
                         timeout=10
                     )
@@ -204,6 +289,7 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
 
 
 
+
 def run_download_task(task_id: str, request: DownloadRequest):
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
     temp_spotdl_file = os.path.join(SPOTDL_CONFIG_DIR, f"temp_{task_id}.spotdl")
@@ -211,6 +297,17 @@ def run_download_task(task_id: str, request: DownloadRequest):
     with open(log_file_path, "w", encoding="utf-8") as f:
         cmd = []
         flags = request.flags
+
+        # Resolve navidrome credentials
+        navi_url = request.navi_url
+        navi_user = request.navi_user
+        navi_pass = request.navi_pass
+        if request.navi_account_id or not navi_pass:
+            n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, SPOTDL_CONFIG_DIR)
+            if n_acc:
+                navi_url = n_acc.get("server", navi_url)
+                navi_user = n_acc.get("username", navi_user)
+                navi_pass = n_acc.get("password", navi_pass)
 
         if request.tool == "spotdl":
             # Wyczyść stary plik błędów przed nowym pobieraniem
@@ -224,7 +321,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
             target_source = request.url
 
             # Navidrome deduplication pre-check
-            if flags.get("check_navidrome") and request.navi_url and request.navi_user and request.navi_pass:
+            if flags.get("check_navidrome") and navi_url and navi_user and navi_pass:
                 f.write("[Deduplikacja] Pobieranie metadanych utworów do weryfikacji w bazie Navidrome...\n")
                 f.flush()
                 try:
@@ -245,16 +342,16 @@ def run_download_task(task_id: str, request: DownloadRequest):
 
                         kept, skipped = navidrome_dedup.filter_existing_songs(
                             songs=song_list,
-                            navi_url=request.navi_url,
-                            navi_user=request.navi_user,
-                            navi_pass=request.navi_pass,
+                            navi_url=navi_url,
+                            navi_user=navi_user,
+                            navi_pass=navi_pass,
                             skip_mode=skip_mode,
                             log_callback=d_log
                         )
 
                         if not kept:
                             f.write(f"\n[Deduplikacja] Wszystkie utwory ({len(skipped)}) znajdują się już w Twojej bibliotece Navidrome! Pomijam pobieranie.\n")
-                            if flags.get("generate_m3u") and request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
+                            if flags.get("generate_m3u") and request.navi_sync and navi_url and navi_user and navi_pass:
                                 f.write("[Navidrome] Tworzenie natywnej playlisty ze zindeksowanych utworów...\n")
                                 navi_song_ids = [s.get("_navidrome_id") for s in skipped if s.get("_navidrome_id")]
                                 if navi_song_ids:
@@ -263,9 +360,9 @@ def run_download_task(task_id: str, request: DownloadRequest):
                                         derived_name = (song_list[0].get("list_name") if song_list else "") or "Nowa Playlista"
                                     try:
                                         navidrome_dedup.subsonic_request(
-                                            base_url=request.navi_url,
-                                            user=request.navi_user,
-                                            password=request.navi_pass,
+                                            base_url=navi_url,
+                                            user=navi_user,
+                                            password=navi_pass,
                                             endpoint="createPlaylist.view",
                                             extra_params={"name": derived_name, "songId": navi_song_ids}
                                         )
@@ -328,7 +425,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 
         elif request.tool == "ytdl":
             batch_file_path = None
-            if flags.get("check_navidrome") and request.navi_url and request.navi_user and request.navi_pass:
+            if flags.get("check_navidrome") and navi_url and navi_user and navi_pass:
                 f.write("[Deduplikacja] Pobieranie metadanych z YouTube / SoundCloud do weryfikacji w Navidrome...\n")
                 f.flush()
                 try:
@@ -341,12 +438,13 @@ def run_download_task(task_id: str, request: DownloadRequest):
 
                         kept, skipped = navidrome_dedup.filter_existing_songs(
                             songs=meta_entries,
-                            navi_url=request.navi_url,
-                            navi_user=request.navi_user,
-                            navi_pass=request.navi_pass,
+                            navi_url=navi_url,
+                            navi_user=navi_user,
+                            navi_pass=navi_pass,
                             skip_mode=skip_mode,
                             log_callback=d_log
                         )
+
 
                         if not kept:
                             mode_desc = "lepszej jakości (FLAC/Lossless)" if skip_mode == "flac_only" else "bibliotece"
@@ -403,15 +501,15 @@ def run_download_task(task_id: str, request: DownloadRequest):
             fix_download_permissions(DOWNLOADS_DIR)
             
             # Navidrome Integration
-            if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
+            if request.navi_sync and navi_url and navi_user and navi_pass:
                 f.write("\n[Navidrome] Rozpoczynanie integracji tworzenia natywnej playlisty...\n")
                 f.flush()
                 try:
                     def call_navi(endpoint, extra_params=None):
                         return navidrome_dedup.subsonic_request(
-                            base_url=request.navi_url,
-                            user=request.navi_user,
-                            password=request.navi_pass,
+                            base_url=navi_url,
+                            user=navi_user,
+                            password=navi_pass,
                             endpoint=endpoint,
                             extra_params=extra_params,
                             timeout=10
@@ -420,6 +518,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
                     # 1. Start Scan
                     call_navi("startScan.view")
                     f.write("[Navidrome] Skanowanie rozpoczete. Oczekuje 15 sekund...\n")
+
                     f.flush()
                     time.sleep(15)
                     
@@ -536,13 +635,20 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
  
 @app.post("/api/slskd/organize")
 async def start_slskd_organize(request: SlskdOrganizeRequest, background_tasks: BackgroundTasks):
-    if not request.slskd_url:
-        raise HTTPException(status_code=400, detail="Adres URL slskd jest wymagany")
+    effective_url = request.slskd_url
+    if not effective_url:
+        acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+        if acc:
+            effective_url = acc.get("server", "")
+
+    if not effective_url:
+        raise HTTPException(status_code=400, detail="Brak skonfigurowanego serwera Soulseek (slskd) w slskd_accounts.txt ani w żądaniu")
         
     task_id = str(uuid.uuid4())
     background_tasks.add_task(run_slskd_organize_task, task_id, request)
     
     return {"status": "started", "task_id": task_id, "message": "Rozpoczęto porządkowanie plików z Soulseeka"}
+
 
 @app.get("/api/logs/{task_id}")
 async def stream_logs(task_id: str):

@@ -11,13 +11,9 @@ function appData() {
         logs: [],
         
         // Services & Integrations
-        // Services & Integrations (persisted in localStorage)
-        slskdUrl: localStorage.getItem('slskdUrl') || '',
-        slskdUser: localStorage.getItem('slskdUser') || '',
-        slskdPass: localStorage.getItem('slskdPass') || '',
-        naviUrl: localStorage.getItem('naviUrl') || '',
-        naviUser: localStorage.getItem('naviUser') || '',
-        naviPass: localStorage.getItem('naviPass') || '',
+        naviAccounts: [],
+        selectedNaviAccount: localStorage.getItem('selectedNaviAccount') || '',
+        slskdAccount: { configured: false, server: '', username: '' },
         naviSync: localStorage.getItem('naviSync') === 'true',
         statusDisplayMode: (localStorage.getItem('statusDisplayMode') && localStorage.getItem('statusDisplayMode') !== 'errors_only') ? localStorage.getItem('statusDisplayMode') : 'not_logged_or_error',
         naviStatus: { tested: false, ok: false, msg: '' },
@@ -25,6 +21,18 @@ function appData() {
         testingNavi: false,
         testingSlskd: false,
         organizingSlskd: false,
+
+        // Spotify Metadata
+        spotifyMetadata: null,
+        fetchingMeta: false,
+        copiedMetaCommand: false,
+        copiedMetaFeedbackTimer: null,
+
+        get selectedNaviUsername() {
+            if (!this.selectedNaviAccount) return '';
+            const acc = this.naviAccounts.find(a => a.id === this.selectedNaviAccount);
+            return acc ? acc.username : this.selectedNaviAccount;
+        },
 
         // Input Data
         url: '',
@@ -98,9 +106,9 @@ function appData() {
 
         initApp() {
             this.loadSettings();
+            this.fetchAccounts();
             this.fetchWallpapers();
             this.fetchErrors();
-            this.checkServicesStatus();
             
             // Watch for changes and save to local storage
             this.$watch('showTitle', () => this.saveSettings());
@@ -134,41 +142,14 @@ function appData() {
                 }
             });
             
-            // Watchers for navidrome credentials
-            this.$watch('naviUrl', value => {
-                localStorage.setItem('naviUrl', value);
-                this.naviStatus = { tested: false, ok: false, msg: '' };
-                this.saveSettings();
-            });
-            this.$watch('naviUser', value => {
-                localStorage.setItem('naviUser', value);
-                this.naviStatus = { tested: false, ok: false, msg: '' };
-                this.saveSettings();
-            });
-            this.$watch('naviPass', value => {
-                localStorage.setItem('naviPass', value || '');
+            // Watcher for navidrome account selection
+            this.$watch('selectedNaviAccount', value => {
+                localStorage.setItem('selectedNaviAccount', value || '');
                 this.naviStatus = { tested: false, ok: false, msg: '' };
                 this.saveSettings();
             });
             this.$watch('naviSync', value => {
                 localStorage.setItem('naviSync', value ? 'true' : 'false');
-                this.saveSettings();
-            });
-            
-            // Watchers for soulseek credentials
-            this.$watch('slskdUrl', value => {
-                localStorage.setItem('slskdUrl', value);
-                this.slskdStatus = { tested: false, ok: false, msg: '' };
-                this.saveSettings();
-            });
-            this.$watch('slskdUser', value => {
-                localStorage.setItem('slskdUser', value);
-                this.slskdStatus = { tested: false, ok: false, msg: '' };
-                this.saveSettings();
-            });
-            this.$watch('slskdPass', value => {
-                localStorage.setItem('slskdPass', value || '');
-                this.slskdStatus = { tested: false, ok: false, msg: '' };
                 this.saveSettings();
             });
 
@@ -196,14 +177,7 @@ function appData() {
             };
             localStorage.setItem('downloadeusz_settings', JSON.stringify(settings));
             localStorage.setItem('statusDisplayMode', this.statusDisplayMode);
-
-            // Persist service addresses, logins, passwords, and sync settings
-            localStorage.setItem('slskdUrl', this.slskdUrl || '');
-            localStorage.setItem('slskdUser', this.slskdUser || '');
-            localStorage.setItem('slskdPass', this.slskdPass || '');
-            localStorage.setItem('naviUrl', this.naviUrl || '');
-            localStorage.setItem('naviUser', this.naviUser || '');
-            localStorage.setItem('naviPass', this.naviPass || '');
+            localStorage.setItem('selectedNaviAccount', this.selectedNaviAccount || '');
             localStorage.setItem('naviSync', this.naviSync ? 'true' : 'false');
         },
         
@@ -241,12 +215,16 @@ function appData() {
                 const storedMode = localStorage.getItem('statusDisplayMode');
                 this.statusDisplayMode = (storedMode && storedMode !== 'errors_only') ? storedMode : 'not_logged_or_error';
             }
-            this.slskdUrl = localStorage.getItem('slskdUrl') || this.slskdUrl || '';
-            this.slskdUser = localStorage.getItem('slskdUser') || this.slskdUser || '';
-            this.slskdPass = localStorage.getItem('slskdPass') || this.slskdPass || '';
-            this.naviUrl = localStorage.getItem('naviUrl') || this.naviUrl || '';
-            this.naviUser = localStorage.getItem('naviUser') || this.naviUser || '';
-            this.naviPass = localStorage.getItem('naviPass') || this.naviPass || '';
+
+            // Remove obsolete plaintext credentials from localStorage
+            localStorage.removeItem('slskdUrl');
+            localStorage.removeItem('slskdUser');
+            localStorage.removeItem('slskdPass');
+            localStorage.removeItem('naviUrl');
+            localStorage.removeItem('naviUser');
+            localStorage.removeItem('naviPass');
+
+            this.selectedNaviAccount = localStorage.getItem('selectedNaviAccount') || '';
             if (localStorage.getItem('naviSync') !== null) {
                 this.naviSync = localStorage.getItem('naviSync') === 'true';
             }
@@ -423,17 +401,47 @@ function appData() {
             };
         },
         
+        async fetchAccounts() {
+            try {
+                const [naviRes, slskdRes] = await Promise.all([
+                    fetch('/api/accounts/navidrome'),
+                    fetch('/api/accounts/slskd')
+                ]);
+                if (naviRes.ok) {
+                    const naviData = await naviRes.json();
+                    this.naviAccounts = naviData.accounts || [];
+                    if (this.naviAccounts.length > 0) {
+                        const exists = this.naviAccounts.some(a => a.id === this.selectedNaviAccount);
+                        if (!exists) {
+                            this.selectedNaviAccount = this.naviAccounts[0].id;
+                            localStorage.setItem('selectedNaviAccount', this.selectedNaviAccount);
+                        }
+                    } else {
+                        this.selectedNaviAccount = '';
+                        localStorage.removeItem('selectedNaviAccount');
+                    }
+                }
+                if (slskdRes.ok) {
+                    const slskdData = await slskdRes.json();
+                    this.slskdAccount = slskdData || { configured: false, server: '', username: '' };
+                }
+            } catch (error) {
+                console.error('Failed to fetch accounts', error);
+            } finally {
+                this.checkServicesStatus();
+            }
+        },
+
         shouldShowStatusBanner() {
             if (this.statusDisplayMode === 'always') return true;
-            // shortcut: enforces both Navidrome and Soulseek to be logged in before hiding banner in 'not_logged_or_error' mode, per user specification
-            const naviNotReady = !this.naviUrl || !this.naviUser || !this.naviPass || !this.naviStatus.ok;
-            const slskdNotReady = !this.slskdUrl || !this.slskdUser || !this.slskdPass || !this.slskdStatus.ok;
+            const naviNotReady = !this.selectedNaviAccount || !this.naviStatus.ok;
+            const slskdNotReady = !this.slskdAccount.configured || !this.slskdStatus.ok;
             return Boolean(naviNotReady || slskdNotReady);
         },
 
         async testNavidrome() {
-            if (!this.naviUrl) {
-                this.naviStatus = { tested: false, ok: false, msg: 'Brak adresu URL Navidrome' };
+            if (!this.selectedNaviAccount) {
+                this.naviStatus = { tested: false, ok: false, msg: 'Brak wybranego konta Navidrome' };
                 return;
             }
             this.testingNavi = true;
@@ -442,15 +450,13 @@ function appData() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        url: this.naviUrl,
-                        user: this.naviUser,
-                        password: this.naviPass
+                        account_id: this.selectedNaviAccount
                     })
                 });
                 const data = await res.json();
                 this.naviStatus = {
                     tested: true,
-                    ok: !!data.ok,
+                    ok: Boolean(data.ok),
                     msg: data.message || (data.ok ? 'Połączono pomyślnie z Navidrome!' : 'Błąd połączenia')
                 };
             } catch (e) {
@@ -465,8 +471,8 @@ function appData() {
         },
 
         async testSlskd() {
-            if (!this.slskdUrl) {
-                this.slskdStatus = { tested: false, ok: false, msg: 'Brak adresu URL Soulseek (slskd)' };
+            if (!this.slskdAccount || !this.slskdAccount.configured) {
+                this.slskdStatus = { tested: false, ok: false, msg: 'Brak konfiguracji w slskd_accounts.txt' };
                 return;
             }
             this.testingSlskd = true;
@@ -474,16 +480,12 @@ function appData() {
                 const res = await fetch('/api/test/slskd', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: this.slskdUrl,
-                        username: this.slskdUser,
-                        password: this.slskdPass
-                    })
+                    body: JSON.stringify({})
                 });
                 const data = await res.json();
                 this.slskdStatus = {
                     tested: true,
-                    ok: !!data.ok,
+                    ok: Boolean(data.ok),
                     msg: data.message || (data.ok ? 'Połączono i zalogowano pomyślnie do Soulseek (slskd)!' : 'Błąd połączenia')
                 };
             } catch (e) {
@@ -499,12 +501,12 @@ function appData() {
 
         async checkServicesStatus() {
             const promises = [];
-            if (this.naviUrl) {
+            if (this.selectedNaviAccount) {
                 promises.push(this.testNavidrome());
             } else {
                 this.naviStatus = { tested: false, ok: false, msg: '' };
             }
-            if (this.slskdUrl) {
+            if (this.slskdAccount && this.slskdAccount.configured) {
                 promises.push(this.testSlskd());
             } else {
                 this.slskdStatus = { tested: false, ok: false, msg: '' };
@@ -515,8 +517,8 @@ function appData() {
         },
 
         async organizeSlskd() {
-            if (!this.slskdUrl) {
-                this.statusMsg = 'Brak adresu URL Soulseek (slskd). Skonfiguruj go w ustawieniach.';
+            if (!this.slskdAccount || !this.slskdAccount.configured) {
+                this.statusMsg = 'Brak konfiguracji w slskd_accounts.txt.';
                 this.statusError = true;
                 return;
             }
@@ -530,13 +532,9 @@ function appData() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        slskd_url: this.slskdUrl,
-                        slskd_user: this.slskdUser,
-                        slskd_pass: this.slskdPass,
+                        slskd_url: this.slskdAccount.server || '',
                         navi_sync: this.naviSync,
-                        navi_url: this.naviUrl,
-                        navi_user: this.naviUser,
-                        navi_pass: this.naviPass
+                        navi_account_id: this.selectedNaviAccount
                     })
                 });
 
@@ -575,9 +573,7 @@ function appData() {
                         tool: this.selectedTool,
                         url: this.url,
                         flags: this.flags,
-                        navi_url: this.naviUrl,
-                        navi_user: this.naviUser,
-                        navi_pass: this.naviPass,
+                        navi_account_id: this.selectedNaviAccount,
                         navi_sync: this.naviSync
                     })
                 });
@@ -603,6 +599,85 @@ function appData() {
                 this.loading = false;
                 this.fetchErrors();
             }
+        },
+
+        async fetchSpotifyMetadata() {
+            if (!this.url || this.fetchingMeta) return;
+            this.fetchingMeta = true;
+            this.statusMsg = '';
+            this.statusError = false;
+            try {
+                const res = await fetch('/api/spotify/metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: this.url })
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    this.spotifyMetadata = data;
+                } else {
+                    this.statusError = true;
+                    this.statusMsg = data.detail || data.message || 'Nie udało się pobrać metadanych Spotify.';
+                }
+            } catch (err) {
+                console.error('Błąd pobierania metadanych Spotify:', err);
+                this.statusError = true;
+                this.statusMsg = 'Błąd połączenia z serwerem przy pobieraniu metadanych.';
+            } finally {
+                this.fetchingMeta = false;
+            }
+        },
+
+        copyFallback(text) {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                textarea.style.top = '-9999px';
+                textarea.setAttribute('readonly', '');
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            } catch (err) {
+                console.warn('Fallback clipboard copy failed', err);
+            }
+        },
+
+        copyMetadataCommand() {
+            if (!this.spotifyMetadata || !this.spotifyMetadata.command) return;
+            const cmd = this.spotifyMetadata.command;
+
+            // Copy to clipboard with fallback for non-secure HTTP contexts (e.g. LAN IP)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(cmd).catch(() => {
+                    this.copyFallback(cmd);
+                });
+            } else {
+                this.copyFallback(cmd);
+            }
+
+            // Append command to logs
+            this.logs.push('[Metadane FFmpeg] Wygenerowano komendę:\n' + cmd);
+
+            // Auto-scroll the live terminal to bottom
+            this.$nextTick(() => {
+                const container = document.getElementById('log-container');
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+
+            // Show feedback for 2.5 seconds
+            this.copiedMetaCommand = true;
+            if (this.copiedMetaFeedbackTimer) {
+                clearTimeout(this.copiedMetaFeedbackTimer);
+            }
+            this.copiedMetaFeedbackTimer = setTimeout(() => {
+                this.copiedMetaCommand = false;
+                this.copiedMetaFeedbackTimer = null;
+            }, 2500);
         }
     }
 }

@@ -1,0 +1,6 @@
+# Format konfiguracji konta Soulseek (slskd) w Downloadeusz
+# Plik: slskd_accounts.txt (umieść w zamontowanym katalogu /spotdl_config)
+
+Server: "http://test.pl"
+user: "test_user"
+password: "test"

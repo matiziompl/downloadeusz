@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.git
+.gitignore
+.dockerignore
+.pytest_cache/
+logs/
+.env
+navidrome_accounts.txt
+slskd_accounts.txt

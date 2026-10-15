@@ -3,3 +3,7 @@ __pycache__/
 logs/
 .env
 .DS_Store
+.pytest_cache/
+navidrome_accounts.txt
+slskd_accounts.txt
+

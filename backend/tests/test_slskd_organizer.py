@@ -122,9 +122,11 @@ def test_start_slskd_organize_endpoint():
     from backend.main import app
 
     client = TestClient(app)
-    # Missing url -> 400
-    res_bad = client.post("/api/slskd/organize", json={"slskd_url": ""})
-    assert res_bad.status_code == 400
+    # Missing url and no account configured -> 400
+    with patch("backend.accounts.get_active_slskd_account", return_value=None):
+        res_bad = client.post("/api/slskd/organize", json={"slskd_url": ""})
+        assert res_bad.status_code == 400
+
 
     # Valid url -> 200 started
     with patch("backend.main.run_slskd_organize_task"):
@@ -137,6 +139,14 @@ def test_start_slskd_organize_endpoint():
         data = res.json()
         assert data["status"] == "started"
         assert "task_id" in data
+
+    # Empty url but configured in accounts -> 200 started
+    with patch("backend.accounts.get_active_slskd_account", return_value={"server": "http://auto-slskd:5030"}), \
+         patch("backend.main.run_slskd_organize_task"):
+        res = client.post("/api/slskd/organize", json={})
+        assert res.status_code == 200
+        assert res.json()["status"] == "started"
+
 
 def test_organize_slskd_with_login_credentials(tmp_path):
     source_dir = tmp_path / "slskd"
@@ -186,5 +196,30 @@ def test_organize_slskd_with_login_credentials(tmp_path):
         assert result["organized"] == 1
         expected = dest_dir / "Radiohead" / "1997 - OK Computer" / "01 Airbag.mp3"
         assert expected.exists()
+
+
+def test_run_slskd_organize_task_auto_resolves_credentials(tmp_path):
+    from backend.main import run_slskd_organize_task, SlskdOrganizeRequest
+
+    fake_account = {
+        "server": "http://auto-server:5030",
+        "username": "auto_user",
+        "password": "auto_password"
+    }
+
+    req = SlskdOrganizeRequest(slskd_url="http://auto-server:5030") # url provided, pass omitted
+
+    with patch("backend.accounts.get_active_slskd_account", return_value=fake_account), \
+         patch("backend.slskd_organizer.organize_slskd_downloads") as mock_organize, \
+         patch("backend.main.fix_download_permissions"):
+        mock_organize.return_value = {"organized": 0}
+        run_slskd_organize_task("test_task_slskd", req)
+
+        assert mock_organize.called
+        kwargs = mock_organize.call_args.kwargs
+        assert kwargs["slskd_username"] == "auto_user"
+        assert kwargs["slskd_password"] == "auto_password"
+        assert kwargs["slskd_url"] == "http://auto-server:5030"
+
 
 

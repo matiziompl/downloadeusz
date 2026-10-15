@@ -1,0 +1,10 @@
+# Format konfiguracji kont Navidrome w Downloadeusz
+# Plik: navidrome_accounts.txt (umieść w zamontowanym katalogu /spotdl_config)
+# Każde konto definiuje się podając Server, user oraz password
+
+Server: "http://test.pl"
+user: "test_user"
+password: "test"
+
+user: "test_user2"
+password: "test2"
