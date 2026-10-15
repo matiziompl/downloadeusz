@@ -14,15 +14,18 @@ POLISH_TRANS = str.maketrans({
 })
 
 def strip_noise(title: str) -> str:
-    """Strip common noise phrases from titles like (Remastered 2011), (Official Video), [Live], etc."""
+    """Strip common noise phrases from titles like (Remastered 2011), (Official Video), [Live], track numbers, etc."""
     noise_patterns = [
-        r'\((?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe)[^)]*\)',
-        r'\[(?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe)[^\]]*\]',
-        r'-\s*(?:official|remaster(?:ed)?|live|audio|video).*$',
+        r'\((?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe|version|anniversary|expanded)[^)]*\)',
+        r'\[(?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe|version|anniversary|expanded)[^\]]*\]',
+        r'-\s*(?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe|version|anniversary|expanded).*$',
+        r'-\s*.*?(?:version|remaster(?:ed)?|mix|edit|deluxe|anniversary|session|live|mono|stereo).*$',
     ]
     res = title
     for p in noise_patterns:
         res = re.sub(p, '', res, flags=re.IGNORECASE)
+    # Strip leading track numbers like '01 - ' or '01. '
+    res = re.sub(r'^\d+[\s\.\-]+', '', res)
     return res.strip()
 
 def clean_string(s: str) -> str:
@@ -42,13 +45,17 @@ def clean_string(s: str) -> str:
     # Collapse multiple spaces
     return ' '.join(cleaned.split())
 
-def is_lossless(suffix: str, content_type: str = "") -> bool:
-    """Check if file format is lossless (FLAC, WAV, ALAC, AIFF)."""
+def is_lossless(suffix: str, content_type: str = "", path: str = "") -> bool:
+    """Check if file format is lossless (FLAC, WAV, ALAC, AIFF, APE)."""
     s = (suffix or "").lower().strip('.')
     ct = (content_type or "").lower()
-    if s in ["flac", "wav", "alac", "aiff"]:
+    p = (path or "").lower()
+    lossless_formats = {"flac", "wav", "alac", "aiff", "ape"}
+    if s in lossless_formats:
         return True
-    if "flac" in ct or "audio/x-wav" in ct or "audio/wav" in ct:
+    if any(p.endswith(f".{ext}") for ext in lossless_formats):
+        return True
+    if "flac" in ct or "audio/x-wav" in ct or "audio/wav" in ct or "audio/x-flac" in ct:
         return True
     return False
 
@@ -103,57 +110,72 @@ def search_navidrome_song(
     if not c_target_title:
         return None
 
-    clean_search_query = f"{artist} {title}".strip()
-    try:
-        data = subsonic_request(
-            base_url=navi_url,
-            user=navi_user,
-            password=navi_pass,
-            endpoint="search3.view",
-            extra_params={
-                "query": clean_search_query,
-                "songCount": 10,
-                "albumCount": 0,
-                "artistCount": 0
-            },
-            timeout=5
-        )
-        songs = data.get("subsonic-response", {}).get("searchResult3", {}).get("song", [])
-        if not songs:
-            songs = data.get("subsonic-response", {}).get("searchResult2", {}).get("song", [])
+    def sanitize_search_query(text: str) -> str:
+        s = re.sub(r'[-/\\()\[\]"\'*+~^:?!]', ' ', text)
+        return ' '.join(s.split())
 
-        for song in songs:
-            c_song_title = clean_string(song.get("title", ""))
-            c_song_artist = clean_string(song.get("artist", ""))
+    clean_target_title = strip_noise(title)
+    primary_query = sanitize_search_query(f"{artist} {clean_target_title}")
+    fallback_query = sanitize_search_query(clean_target_title)
 
-            if not c_song_title:
-                continue
+    queries_to_try = [q for q in [primary_query, fallback_query] if q]
+    seen_queries = set()
 
-            # Title matching:
-            # For short titles (<= 4 chars, e.g. "One", "War", "Run"), require exact match
-            if len(c_target_title) <= 4 or len(c_song_title) <= 4:
-                title_match = (c_target_title == c_song_title)
-            else:
-                title_match = (
-                    c_target_title == c_song_title
-                    or c_target_title.startswith(c_song_title + " ")
-                    or c_song_title.startswith(c_target_title + " ")
+    for query_text in queries_to_try:
+        if query_text in seen_queries:
+            continue
+        seen_queries.add(query_text)
+
+        try:
+            data = subsonic_request(
+                base_url=navi_url,
+                user=navi_user,
+                password=navi_pass,
+                endpoint="search3.view",
+                extra_params={
+                    "query": query_text,
+                    "songCount": 15,
+                    "albumCount": 0,
+                    "artistCount": 0
+                },
+                timeout=5
+            )
+            songs = data.get("subsonic-response", {}).get("searchResult3", {}).get("song", [])
+            if not songs:
+                songs = data.get("subsonic-response", {}).get("searchResult2", {}).get("song", [])
+
+            for song in songs:
+                c_song_title = clean_string(song.get("title", ""))
+                c_song_artist = clean_string(song.get("artist", ""))
+
+                if not c_song_title:
+                    continue
+
+                # Title matching:
+                # For short titles (<= 4 chars, e.g. "One", "War", "Run"), require exact match
+                if len(c_target_title) <= 4 or len(c_song_title) <= 4:
+                    title_match = (c_target_title == c_song_title)
+                else:
+                    title_match = (
+                        c_target_title == c_song_title
+                        or c_target_title.startswith(c_song_title + " ")
+                        or c_song_title.startswith(c_target_title + " ")
+                    )
+
+                # Artist matching:
+                artist_match = (
+                    not c_target_artist
+                    or not c_song_artist
+                    or c_target_artist == c_song_artist
+                    or c_target_artist in c_song_artist
+                    or c_song_artist in c_target_artist
                 )
 
-            # Artist matching:
-            artist_match = (
-                not c_target_artist
-                or not c_song_artist
-                or c_target_artist == c_song_artist
-                or c_target_artist in c_song_artist
-                or c_song_artist in c_target_artist
-            )
+                if title_match and artist_match:
+                    return song
 
-            if title_match and artist_match:
-                return song
-
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     return None
 
@@ -196,7 +218,8 @@ def filter_existing_songs(
         if match:
             suffix = match.get("suffix", "").lower()
             content_type = match.get("contentType", "")
-            match_lossless = is_lossless(suffix, content_type)
+            path = match.get("path", "")
+            match_lossless = is_lossless(suffix, content_type, path)
 
             should_skip = False
             if skip_mode == "all":
@@ -205,7 +228,7 @@ def filter_existing_songs(
                 should_skip = True
 
             if should_skip:
-                fmt_name = suffix.upper() if suffix else "ISTNIEJĄCY"
+                fmt_name = suffix.upper() if suffix else ("FLAC" if match_lossless else "ISTNIEJĄCY")
                 log(f"[Deduplikacja] Znaleziono w Navidrome ({fmt_name}): {artist} - {title} -> POMIJAM")
                 # Store matched song ID in metadata in case needed for playlist reconstruction
                 song["_navidrome_id"] = match.get("id")

@@ -14,6 +14,9 @@ def test_clean_string():
     assert clean_string("Żółty") == "zolty"
     assert clean_string("Кино - Группа крови") == "кино группа крови"
     assert clean_string("宇多田ヒカル - First Love") == "宇多田ヒカル first love"
+    assert clean_string("01 - Smells Like Teen Spirit (Remastered 2021)") == "smells like teen spirit"
+    assert clean_string("In Bloom - Nevermind Version") == "in bloom"
+    assert clean_string("Come As You Are - 2011 Remaster") == "come as you are"
 
 def test_short_title_does_not_false_match():
     # Searching for "One" should NOT match "One More Time"
@@ -52,6 +55,8 @@ def test_is_lossless():
     assert is_lossless("mp3") is False
     assert is_lossless("m4a", "audio/mp4") is False
     assert is_lossless("m4a", "audio/flac") is True
+    assert is_lossless("", "", "/downloads/Nirvana/Nevermind/01 Smells Like Teen Spirit.flac") is True
+    assert is_lossless("", "", "/downloads/Nirvana/Nevermind/01 Smells Like Teen Spirit.mp3") is False
 
 def test_search_navidrome_song():
     mock_response = MagicMock()
@@ -85,6 +90,38 @@ def test_search_navidrome_song():
         assert match is not None
         assert match["title"] == "One More Time"
         assert match["suffix"] == "flac"
+
+def test_search_navidrome_song_nirvana_remastered_match():
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps({
+        "subsonic-response": {
+            "status": "ok",
+            "searchResult3": {
+                "song": [
+                    {
+                        "id": "s_nirvana_1",
+                        "title": "Smells Like Teen Spirit",
+                        "artist": "Nirvana",
+                        "album": "Nevermind",
+                        "path": "Nirvana/Nevermind/01 Smells Like Teen Spirit.flac",
+                        "contentType": "audio/flac"
+                    }
+                ]
+            }
+        }
+    }).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+
+    with patch("urllib.request.urlopen", return_value=mock_response):
+        match = search_navidrome_song(
+            navi_url="http://navidrome:4533",
+            navi_user="admin",
+            navi_pass="pass",
+            artist="Nirvana",
+            title="01 - Smells Like Teen Spirit (Remastered 2021)"
+        )
+        assert match is not None
+        assert match["id"] == "s_nirvana_1"
 
 def test_filter_existing_songs_flac_only():
     songs = [
