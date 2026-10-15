@@ -73,6 +73,20 @@ function appData() {
             'teal': '#0f766e',
             'cyan': '#0e7490',
         },
+        presetAccentColors: {
+            'dark': '#3b82f6',
+            'slate': '#38bdf8',
+            'ocean': '#38bdf8',
+            'indigo': '#6366f1',
+            'purple': '#a855f7',
+            'pink': '#ec4899',
+            'rose': '#f43f5e',
+            'sunset': '#f97316',
+            'orange': '#fb923c',
+            'forest': '#22c55e',
+            'teal': '#14b8a6',
+            'cyan': '#06b6d4',
+        },
         
         wallpapers: [],
         selectedImage: '',
@@ -265,11 +279,30 @@ function appData() {
             return 'background-color: #171717'; // default dark
         },
         
-        getEffectiveColor() {
-            if (this.themeColor === 'auto') {
-                return this.extractedColor || '#ffffff';
+        isTooDark(hex) {
+            if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return false;
+            let clean = hex.slice(1);
+            if (clean.length === 3) {
+                clean = clean.split('').map(c => c + c).join('');
             }
-            return this.themeColor;
+            if (clean.length !== 6) return false;
+            const r = parseInt(clean.slice(0, 2), 16);
+            const g = parseInt(clean.slice(2, 4), 16);
+            const b = parseInt(clean.slice(4, 6), 16);
+            if (isNaN(r) || isNaN(g) || isNaN(b)) return false;
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return lum < 0.32; // Boost/fallback if brightness is below 32%
+        },
+
+        getEffectiveColor() {
+            let color = this.themeColor;
+            if (color === 'auto') {
+                color = this.extractedColor;
+            }
+            if (!color || color === 'auto' || this.isTooDark(color)) {
+                return '#3b82f6';
+            }
+            return color;
         },
         
         rgbToHex(r, g, b) {
@@ -280,19 +313,34 @@ function appData() {
             if (this.themeColor !== 'auto') return;
             
             if (this.bgType === 'preset') {
-                this.extractedColor = this.presetColors[this.bgPreset] || '#3b82f6';
+                this.extractedColor = this.presetAccentColors[this.bgPreset] || '#3b82f6';
             } else if (this.bgType === 'image' && this.selectedImage) {
-                // Use ColorThief to extract dominant color
+                // Use ColorThief to extract vibrant accent color
                 const img = new Image();
                 img.crossOrigin = 'Anonymous';
                 img.onload = () => {
                     try {
                         const colorThief = new ColorThief();
-                        const color = colorThief.getColor(img);
-                        this.extractedColor = this.rgbToHex(color[0], color[1], color[2]);
+                        const palette = colorThief.getPalette(img, 8);
+                        let bestColor = null;
+                        if (palette && palette.length > 0) {
+                            for (const c of palette) {
+                                const hex = this.rgbToHex(c[0], c[1], c[2]);
+                                if (!this.isTooDark(hex)) {
+                                    bestColor = hex;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!bestColor) {
+                            const dom = colorThief.getColor(img);
+                            const hex = this.rgbToHex(dom[0], dom[1], dom[2]);
+                            bestColor = !this.isTooDark(hex) ? hex : '#3b82f6';
+                        }
+                        this.extractedColor = bestColor;
                     } catch (e) {
                         console.error("ColorThief failed", e);
-                        this.extractedColor = '#ffffff';
+                        this.extractedColor = '#3b82f6';
                     }
                 };
                 img.src = `/wallpapers/${encodeURI(this.selectedImage)}`;

@@ -167,9 +167,9 @@
                  <div class="flex flex-col gap-2">
                      <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="statusDisplayMode === 'not_logged_or_error' ? `border-color: ${getEffectiveColor()}` : ''">
                          <input type="radio" x-model="statusDisplayMode" value="not_logged_or_error" class="hidden">
-                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                             <div class="w-2 h-2 rounded-full" x-show="statusDisplayMode === 'not_logged_or_error'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                         </div>
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="statusDisplayMode === 'not_logged_or_error' ? '' : 'border-white/30'" :style="statusDisplayMode === 'not_logged_or_error' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="statusDisplayMode === 'not_logged_or_error' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                          <div>
                              <span class="text-sm font-medium">Gdy niezalogowany lub błąd</span>
                              <p class="text-xs text-white/50">Ukryj baner, gdy obie usługi są skonfigurowane i pomyślnie połączone</p>
@@ -177,9 +177,9 @@
                      </label>
                      <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="statusDisplayMode === 'always' ? `border-color: ${getEffectiveColor()}` : ''">
                          <input type="radio" x-model="statusDisplayMode" value="always" class="hidden">
-                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                             <div class="w-2 h-2 rounded-full" x-show="statusDisplayMode === 'always'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                         </div>
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="statusDisplayMode === 'always' ? '' : 'border-white/30'" :style="statusDisplayMode === 'always' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="statusDisplayMode === 'always' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                          <div>
                              <span class="text-sm font-medium">Zawsze</span>
                              <p class="text-xs text-white/50">Baner statusu usług jest stale widoczny</p>
@@ -194,16 +194,16 @@
                  <div class="flex flex-col gap-2">
                      <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="logMode === 'simple' ? `border-color: ${getEffectiveColor()}` : ''">
                          <input type="radio" x-model="logMode" value="simple" class="hidden">
-                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                             <div class="w-2 h-2 rounded-full" x-show="logMode === 'simple'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                         </div>
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="logMode === 'simple' ? '' : 'border-white/30'" :style="logMode === 'simple' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="logMode === 'simple' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                          <span class="text-sm">Proste info</span>
                      </label>
                      <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="logMode === 'advanced' ? `border-color: ${getEffectiveColor()}` : ''">
                          <input type="radio" x-model="logMode" value="advanced" class="hidden">
-                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                             <div class="w-2 h-2 rounded-full" x-show="logMode === 'advanced'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                         </div>
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="logMode === 'advanced' ? '' : 'border-white/30'" :style="logMode === 'advanced' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="logMode === 'advanced' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                          <span class="text-sm">Konsola na żywo</span>
                      </label>
                  </div>
@@ -443,17 +443,17 @@
                         <div x-show="flags.check_navidrome" x-transition class="pl-13 space-y-2.5">
                             <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
                                 <input type="radio" x-model="flags.navidrome_skip_mode" value="flac_only" class="hidden">
-                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'flac_only'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                                </div>
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="flags.navidrome_skip_mode === 'flac_only' ? '' : 'border-white/30'" :style="flags.navidrome_skip_mode === 'flac_only' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="flags.navidrome_skip_mode === 'flac_only' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                                 <span>Pomijaj tylko wersje FLAC / Lossless</span>
                             </label>
                             
                             <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
                                 <input type="radio" x-model="flags.navidrome_skip_mode" value="all" class="hidden">
-                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'all'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                                </div>
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="flags.navidrome_skip_mode === 'all' ? '' : 'border-white/30'" :style="flags.navidrome_skip_mode === 'all' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="flags.navidrome_skip_mode === 'all' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                                 <span>Pomijaj dowolny format (FLAC lub MP3)</span>
                             </label>
                         </div>
@@ -496,17 +496,17 @@
                         <div x-show="flags.check_navidrome" x-transition class="pl-13 space-y-2.5">
                             <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
                                 <input type="radio" x-model="flags.navidrome_skip_mode" value="flac_only" class="hidden">
-                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'flac_only'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                                </div>
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="flags.navidrome_skip_mode === 'flac_only' ? '' : 'border-white/30'" :style="flags.navidrome_skip_mode === 'flac_only' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="flags.navidrome_skip_mode === 'flac_only' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                                 <span>Pomijaj jeśli mam już lepszą jakość (FLAC / Lossless)</span>
                             </label>
                             
                             <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
                                 <input type="radio" x-model="flags.navidrome_skip_mode" value="all" class="hidden">
-                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
-                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'all'" :style="`background-color: ${getEffectiveColor()}`"></div>
-                                </div>
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50 transition-colors" :class="flags.navidrome_skip_mode === 'all' ? '' : 'border-white/30'" :style="flags.navidrome_skip_mode === 'all' ? `border-color: ${getEffectiveColor()}` : ''">
+    <div class="w-2 h-2 rounded-full transition-opacity duration-150" :class="flags.navidrome_skip_mode === 'all' ? 'opacity-100' : 'opacity-0'" :style="`background-color: ${getEffectiveColor()}`"></div>
+</div>
                                 <span>Pomijaj dowolny format (FLAC lub MP3)</span>
                             </label>
                         </div>
