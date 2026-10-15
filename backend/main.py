@@ -469,7 +469,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 cmd = ["yt-dlp", request.url]
 
             if request.flags.get("audio_only"):
-                cmd.extend(["-x", "--audio-format", "mp3"])
+                cmd.extend(["-x", "--audio-format", "mp3", "--embed-thumbnail", "--embed-metadata"])
             if request.flags.get("skip_downloaded"):
                 cmd.append("--no-overwrites")
         else:

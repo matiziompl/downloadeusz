@@ -662,14 +662,26 @@
                 </div>
 
                 <!-- Action Button & Feedback -->
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <button @click="copyMetadataCommand()" 
-                            type="button"
-                            class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 border active:scale-[0.98]"
-                            :class="copiedMetaCommand ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-white/10 hover:bg-white/15 text-white border-white/10'">
-                        <i class="ph text-base" :class="copiedMetaCommand ? 'ph-check text-emerald-400' : 'ph-copy'"></i>
-                        <span x-text="copiedMetaCommand ? 'Skopiowano i wklejono do konsoli!' : 'Kopiuj komendę FFmpeg'"></span>
-                    </button>
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
+                        <button @click="copyMetadataCommand()" 
+                                type="button"
+                                class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 border active:scale-[0.98]"
+                                :class="copiedMetaCommand ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-white/10 hover:bg-white/15 text-white border-white/10'">
+                            <i class="ph text-base" :class="copiedMetaCommand ? 'ph-check text-emerald-400' : 'ph-copy'"></i>
+                            <span x-text="copiedMetaCommand ? 'Skopiowano i wklejono do konsoli!' : 'Kopiuj komendę FFmpeg'"></span>
+                        </button>
+
+                        <template x-if="spotifyMetadata && spotifyMetadata.cover_url">
+                            <a :href="spotifyMetadata.cover_url" target="_blank" rel="noopener noreferrer"
+                               title="Pobierz lub wyświetl oryginalną okładkę w pełnej rozdzielczości"
+                               class="w-full sm:w-auto px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 border bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border-white/10 active:scale-[0.98]">
+                                <i class="ph ph-image text-base"></i>
+                                <span>Pobierz okładkę</span>
+                            </a>
+                        </template>
+                    </div>
+
                     <span x-show="copiedMetaCommand" x-transition class="text-xs text-emerald-400/90 font-medium flex items-center gap-1">
                         <i class="ph ph-check-circle"></i> Gotowe do uruchomienia w terminalu
                     </span>

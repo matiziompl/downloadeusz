@@ -97,4 +97,28 @@ def test_fetch_spotify_metadata_success(tmp_path):
         assert meta["year"] == "1991"
         assert meta["track_number"] == "2"
         assert "PLIK_PIOSENKI.mp3" in meta["command"]
+        assert "-id3v2_version" in meta["command"]
+        assert "https://image.url" in meta["command"]
+
+
+def test_build_ffmpeg_tag_command_with_cover_art():
+    tags = {
+        "title": "Lithium",
+        "artist": "Nirvana",
+        "album": "Nevermind",
+        "year": "1991",
+        "track_number": "5",
+        "cover_url": "https://i.scdn.co/image/ab67616d0000b273"
+    }
+    cmd = build_ffmpeg_tag_command(tags, placeholder="PLIK_PIOSENKI.mp3")
+    assert '-i "PLIK_PIOSENKI.mp3"' in cmd
+    assert '-i "https://i.scdn.co/image/ab67616d0000b273"' in cmd
+    assert "-map 0:a -map 1:v" in cmd
+    assert "-c:a copy -c:v copy" in cmd
+    assert "-id3v2_version 3" in cmd
+    assert '-metadata:s:v title="Album cover"' in cmd
+    assert '-metadata:s:v comment="Cover (front)"' in cmd
+    assert "-metadata title=Lithium" in cmd or "-metadata 'title=Lithium'" in cmd
+    assert cmd.endswith('"PLIK_PIOSENKI_otagowany.mp3"')
+
 

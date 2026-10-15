@@ -14,6 +14,7 @@ def build_ffmpeg_tag_command(tags: dict, placeholder: str = "PLIK_PIOSENKI.mp3",
     album = str(tags.get("album") or "")
     year = str(tags.get("year") or "")
     track = str(tags.get("track_number") or "")
+    cover_url = str(tags.get("cover_url") or "").strip()
 
     meta_args = []
     if title:
@@ -33,8 +34,19 @@ def build_ffmpeg_tag_command(tags: dict, placeholder: str = "PLIK_PIOSENKI.mp3",
         ext = ".mp3"
     out_file = f"{base}{output_suffix}{ext}"
 
-    args_str = f" {' '.join(meta_args)}" if meta_args else ""
-    return f'ffmpeg -i "{placeholder}" -c copy{args_str} "{out_file}"'
+    meta_str = f" {' '.join(meta_args)}" if meta_args else ""
+
+    if cover_url:
+        cmd = (
+            f'ffmpeg -i "{placeholder}" -i "{cover_url}" '
+            f'-map 0:a -map 1:v -c:a copy -c:v copy '
+            f'-id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)"'
+            f'{meta_str} "{out_file}"'
+        )
+    else:
+        cmd = f'ffmpeg -i "{placeholder}" -c copy{meta_str} "{out_file}"'
+
+    return cmd
 
 
 def parse_spotdl_song_metadata(song: dict, placeholder: str = "PLIK_PIOSENKI.mp3") -> dict:
