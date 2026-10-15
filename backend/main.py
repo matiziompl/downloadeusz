@@ -7,6 +7,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+try:
+    from backend import navidrome_dedup, slskd_organizer
+except ImportError:
+    import navidrome_dedup
+    import slskd_organizer
+
 app = FastAPI()
 
 # Configuration
@@ -83,8 +89,7 @@ async def test_navidrome(req: NaviTestRequest):
     if not req.url:
         return {"ok": False, "message": "Brak adresu URL Navidrome"}
     try:
-        from navidrome_dedup import subsonic_request
-        data = subsonic_request(
+        data = navidrome_dedup.subsonic_request(
             base_url=req.url,
             user=req.user,
             password=req.password,
@@ -116,8 +121,7 @@ async def test_slskd(req: SlskdTestRequest):
         if not slskd_url.startswith(('http://', 'https://')):
             slskd_url = f"http://{slskd_url}"
 
-        from slskd_organizer import get_slskd_auth_header
-        headers = get_slskd_auth_header(
+        headers = slskd_organizer.get_slskd_auth_header(
             slskd_url,
             username=req.username,
             password=req.password,
@@ -161,9 +165,8 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             f.flush()
 
         log_cb("=== Rozpoczynanie porządkowania plików Soulseek (slskd) ===")
-        from slskd_organizer import organize_slskd_downloads
         try:
-            res = organize_slskd_downloads(
+            res = slskd_organizer.organize_slskd_downloads(
                 slskd_url=request.slskd_url,
                 slskd_api_key=request.slskd_api_key,
                 slskd_username=request.slskd_user,
@@ -178,8 +181,7 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
                 log_cb("\n[Navidrome] Uruchamianie skanowania biblioteki po uporządkowaniu...")
                 try:
-                    from navidrome_dedup import subsonic_request
-                    subsonic_request(
+                    navidrome_dedup.subsonic_request(
                         base_url=request.navi_url,
                         user=request.navi_user,
                         password=request.navi_pass,
@@ -220,7 +222,6 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 f.write("[Deduplikacja] Pobieranie metadanych utworów do weryfikacji w bazie Navidrome...\n")
                 f.flush()
                 try:
-                    from navidrome_dedup import filter_existing_songs
                     subprocess.run(
                         ["spotdl", "save", request.url, "--save-file", temp_spotdl_file],
                         capture_output=True,
@@ -236,7 +237,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
                             f.write(f"{msg}\n")
                             f.flush()
 
-                        kept, skipped = filter_existing_songs(
+                        kept, skipped = navidrome_dedup.filter_existing_songs(
                             songs=song_list,
                             navi_url=request.navi_url,
                             navi_user=request.navi_user,
@@ -255,8 +256,7 @@ def run_download_task(task_id: str, request: DownloadRequest):
                                     if not derived_name or derived_name == "{list}":
                                         derived_name = (song_list[0].get("list_name") if song_list else "") or "Nowa Playlista"
                                     try:
-                                        from navidrome_dedup import subsonic_request
-                                        subsonic_request(
+                                        navidrome_dedup.subsonic_request(
                                             base_url=request.navi_url,
                                             user=request.navi_user,
                                             password=request.navi_pass,
@@ -321,7 +321,49 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 cmd.extend(["--m3u", f"temp_dl_{m3u_name}.m3u"])
                 
         elif request.tool == "ytdl":
-            cmd = ["yt-dlp", request.url]
+            batch_file_path = None
+            if flags.get("check_navidrome") and request.navi_url and request.navi_user and request.navi_pass:
+                f.write("[Deduplikacja] Pobieranie metadanych z YouTube / SoundCloud do weryfikacji w Navidrome...\n")
+                f.flush()
+                try:
+                    meta_entries = navidrome_dedup.extract_ytdl_metadata(request.url)
+                    if meta_entries:
+                        skip_mode = flags.get("navidrome_skip_mode", "flac_only")
+                        def d_log(msg):
+                            f.write(f"{msg}\n")
+                            f.flush()
+
+                        kept, skipped = navidrome_dedup.filter_existing_songs(
+                            songs=meta_entries,
+                            navi_url=request.navi_url,
+                            navi_user=request.navi_user,
+                            navi_pass=request.navi_pass,
+                            skip_mode=skip_mode,
+                            log_callback=d_log
+                        )
+
+                        if not kept:
+                            mode_desc = "lepszej jakości (FLAC/Lossless)" if skip_mode == "flac_only" else "bibliotece"
+                            f.write(f"\n[Deduplikacja] Wszystkie utwory ({len(skipped)}) znajdują się już w Twojej bibliotece Navidrome w {mode_desc}! Pomijam pobieranie.\n")
+                            return
+
+                        if skipped:
+                            batch_file_path = os.path.join(SPOTDL_CONFIG_DIR, f"temp_ytdl_{task_id}.txt")
+                            with open(batch_file_path, "w", encoding="utf-8") as bf:
+                                for item in kept:
+                                    if item.get("url"):
+                                        bf.write(f"{item['url']}\n")
+                            f.write(f"[Deduplikacja] Pobieranie pozostałych {len(kept)} z {len(meta_entries)} utworów...\n")
+                            f.flush()
+                except Exception as e:
+                    f.write(f"[Deduplikacja] Ostrzeżenie przy sprawdzaniu duplikatów: {e}. Kontynuuję normalne pobieranie...\n")
+                    f.flush()
+
+            if 'batch_file_path' in locals() and batch_file_path and os.path.exists(batch_file_path):
+                cmd = ["yt-dlp", "-a", batch_file_path]
+            else:
+                cmd = ["yt-dlp", request.url]
+
             if request.flags.get("audio_only"):
                 cmd.extend(["-x", "--audio-format", "mp3"])
             if request.flags.get("skip_downloaded"):
@@ -367,9 +409,8 @@ def run_download_task(task_id: str, request: DownloadRequest):
                     import glob
                     import json
                     
-                    from navidrome_dedup import subsonic_request
                     def call_navi(endpoint, extra_params=None):
-                        return subsonic_request(
+                        return navidrome_dedup.subsonic_request(
                             base_url=request.navi_url,
                             user=request.navi_user,
                             password=request.navi_pass,
@@ -455,10 +496,15 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 except Exception as e:
                     f.write(f"[Navidrome] Blad integracji: {str(e)}\n")
             
-            # Clean up temporary spotdl file if present
+            # Clean up temporary files if present
             if os.path.exists(temp_spotdl_file):
                 try:
                     os.remove(temp_spotdl_file)
+                except:
+                    pass
+            if 'batch_file_path' in locals() and batch_file_path and os.path.exists(batch_file_path):
+                try:
+                    os.remove(batch_file_path)
                 except:
                     pass
 
@@ -468,6 +514,11 @@ def run_download_task(task_id: str, request: DownloadRequest):
             if os.path.exists(temp_spotdl_file):
                 try:
                     os.remove(temp_spotdl_file)
+                except:
+                    pass
+            if 'batch_file_path' in locals() and batch_file_path and os.path.exists(batch_file_path):
+                try:
+                    os.remove(batch_file_path)
                 except:
                     pass
             f.write(f"\n[Błąd]: {str(e)}\n")

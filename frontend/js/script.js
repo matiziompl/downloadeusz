@@ -108,6 +108,23 @@ function appData() {
             });
             this.$watch('flags', () => this.saveSettings(), { deep: true });
             
+            // Auto-detect tool based on URL (Spotify -> spotdl, YouTube/SoundCloud -> ytdl)
+            this.$watch('url', value => {
+                if (!value) return;
+                const lower = value.trim().toLowerCase();
+                if (lower.includes('spotify.com') || lower.includes('open.spotify.com')) {
+                    this.selectedTool = 'spotdl';
+                } else if (
+                    lower.includes('youtube.com') ||
+                    lower.includes('youtu.be') ||
+                    lower.includes('music.youtube.com') ||
+                    lower.includes('soundcloud.com') ||
+                    lower.includes('on.soundcloud.com')
+                ) {
+                    this.selectedTool = 'ytdl';
+                }
+            });
+            
             // Watchers for navidrome credentials
             this.$watch('naviUrl', value => {
                 localStorage.setItem('naviUrl', value);

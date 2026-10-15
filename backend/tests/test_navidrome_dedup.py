@@ -142,3 +142,90 @@ def test_filter_existing_songs_all():
         )
         assert len(skipped) == 2
         assert len(kept) == 0
+
+def test_extract_ytdl_metadata_single_and_playlist():
+    from backend.navidrome_dedup import extract_ytdl_metadata
+
+    # 1. Single track (e.g. SoundCloud / YouTube)
+    single_mock = MagicMock()
+    single_mock.returncode = 0
+    single_mock.stdout = json.dumps({
+        "_type": "video",
+        "title": "Justice - Genesis (Official Audio)",
+        "uploader": "Ed Banger Records",
+        "url": "https://soundcloud.com/edbangerrecords/genesis"
+    })
+
+    with patch("subprocess.run", return_value=single_mock):
+        entries = extract_ytdl_metadata("https://soundcloud.com/edbangerrecords/genesis")
+        assert len(entries) == 1
+        assert entries[0]["name"] == "Genesis (Official Audio)"
+        assert entries[0]["artists"] == ["Justice"]
+        assert entries[0]["url"] == "https://soundcloud.com/edbangerrecords/genesis"
+
+    # 2. Playlist
+    playlist_mock = MagicMock()
+    playlist_mock.returncode = 0
+    playlist_mock.stdout = json.dumps({
+        "_type": "playlist",
+        "entries": [
+            {
+                "title": "Daft Punk - One More Time",
+                "uploader": "Daft Punk",
+                "url": "https://youtube.com/watch?v=1"
+            },
+            {
+                "title": "Harder Better Faster Stronger",
+                "uploader": "Daft Punk",
+                "artist": "Daft Punk",
+                "url": "https://youtube.com/watch?v=2"
+            }
+        ]
+    })
+
+    with patch("subprocess.run", return_value=playlist_mock):
+        entries = extract_ytdl_metadata("https://youtube.com/playlist?list=123")
+        assert len(entries) == 2
+        assert entries[0]["name"] == "One More Time"
+        assert entries[0]["artists"] == ["Daft Punk"]
+        assert entries[1]["name"] == "Harder Better Faster Stronger"
+        assert entries[1]["artists"] == ["Daft Punk"]
+
+def test_run_download_task_ytdl_dedup_skips_flac(tmp_path):
+    from backend.main import run_download_task, DownloadRequest
+
+    req = DownloadRequest(
+        tool="ytdl",
+        url="https://soundcloud.com/artist/track",
+        flags={
+            "check_navidrome": True,
+            "navidrome_skip_mode": "flac_only",
+            "audio_only": True
+        },
+        navi_url="http://navidrome:4533",
+        navi_user="admin",
+        navi_pass="secret"
+    )
+
+    mock_entries = [{
+        "name": "One More Time",
+        "artists": ["Daft Punk"],
+        "url": "https://soundcloud.com/artist/track"
+    }]
+
+    # Navidrome returns FLAC
+    mock_search_resp = {
+        "title": "One More Time",
+        "artist": "Daft Punk",
+        "suffix": "flac"
+    }
+
+    with patch("backend.navidrome_dedup.extract_ytdl_metadata", return_value=mock_entries), \
+         patch("backend.navidrome_dedup.search_navidrome_song", return_value=mock_search_resp), \
+         patch("subprocess.Popen") as mock_popen:
+
+        run_download_task("test-task-1", req)
+
+        # Since it's already in FLAC, yt-dlp download must be skipped (Popen not called)
+        assert mock_popen.call_count == 0
+

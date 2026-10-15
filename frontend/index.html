@@ -287,13 +287,13 @@
                             class="flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-300 relative z-10"
                             :class="selectedTool === 'ytdl' ? 'shadow-lg' : 'text-white/50 hover:text-white/80'"
                             :style="selectedTool === 'ytdl' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
-                        YouTube (yt-dlp)
+                        YT i SoundCloud (yt-dlp)
                     </button>
                 </div>
 
                 <!-- Input Area -->
                 <div class="mb-6">
-                    <input type="text" x-model="url" placeholder="Wklej link do piosenki, playlisty lub filmu..." 
+                    <input type="text" x-model="url" placeholder="Wklej link do Spotify, YouTube lub SoundCloud..." 
                            class="w-full bg-white/95 text-black px-6 py-5 rounded-2xl text-lg outline-none focus:ring-4 transition-all shadow-inner font-medium placeholder-neutral-500"
                            :style="`--tw-ring-color: ${getEffectiveColor()}80`">
                 </div>
@@ -469,17 +469,48 @@
                 </div>
 
                 <!-- yt-dlp specific flags -->
-                <div x-show="selectedTool === 'ytdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6">
-                     <label class="flex items-center gap-3 cursor-pointer mb-3">
-                        <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
-                        <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
-                        <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
-                    </label>
-                    <label class="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" x-model="flags.audio_only" class="sr-only peer">
-                        <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.audio_only ? `background-color: ${getEffectiveColor()}` : ''"></div>
-                        <span class="text-sm font-medium text-white/80">Tylko Audio (MP3)</span>
-                    </label>
+                <div x-show="selectedTool === 'ytdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.audio_only" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.audio_only ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Tylko Audio (MP3)</span>
+                        </label>
+                    </div>
+
+                    <hr class="border-white/5">
+
+                    <!-- Navidrome Deduplication for YT / SoundCloud -->
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.check_navidrome" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Sprawdź duplikaty w Navidrome</span>
+                        </label>
+                        
+                        <div x-show="flags.check_navidrome" x-transition class="pl-13 space-y-2.5">
+                            <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
+                                <input type="radio" x-model="flags.navidrome_skip_mode" value="flac_only" class="hidden">
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'flac_only'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                                </div>
+                                <span>Pomijaj jeśli mam już lepszą jakość (FLAC / Lossless)</span>
+                            </label>
+                            
+                            <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
+                                <input type="radio" x-model="flags.navidrome_skip_mode" value="all" class="hidden">
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'all'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                                </div>
+                                <span>Pomijaj dowolny format (FLAC lub MP3)</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Command Preview -->

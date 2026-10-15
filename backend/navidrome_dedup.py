@@ -5,6 +5,7 @@ import urllib.parse
 import hashlib
 import secrets
 import json
+import subprocess
 from typing import Dict, List, Any, Optional, Tuple, Callable
 
 POLISH_TRANS = str.maketrans({
@@ -214,3 +215,48 @@ def filter_existing_songs(
         kept.append(song)
 
     return kept, skipped
+
+def extract_ytdl_metadata(url: str, timeout: int = 30) -> List[Dict[str, Any]]:
+    """
+    Extract metadata from a YouTube or SoundCloud URL using yt-dlp --dump-single-json --flat-playlist.
+    Returns list of dicts with 'name', 'artists', 'url', and '_raw'.
+    """
+    try:
+        proc = subprocess.run(
+            ["yt-dlp", "--dump-single-json", "--flat-playlist", url],
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return []
+        data = json.loads(proc.stdout)
+        raw_entries = data.get("entries") if data.get("_type") == "playlist" else [data]
+        entries = []
+        for e in raw_entries:
+            if not e:
+                continue
+            title = e.get("track") or e.get("title") or ""
+            artist = e.get("artist") or e.get("creator") or e.get("uploader") or ""
+            # Often YouTube or SoundCloud titles are "Artist - Title"
+            if " - " in title:
+                parts = title.split(" - ", 1)
+                if parts[0].strip() and parts[1].strip():
+                    artist = parts[0].strip()
+                    title = parts[1].strip()
+
+            entry_url = e.get("url") or e.get("webpage_url") or url
+            if entry_url and not entry_url.startswith(('http://', 'https://')):
+                if "soundcloud" in url:
+                    entry_url = f"https://soundcloud.com/{entry_url.lstrip('/')}"
+                else:
+                    entry_url = f"https://www.youtube.com/watch?v={entry_url}"
+            entries.append({
+                "name": title,
+                "artists": [artist] if artist else [],
+                "url": entry_url,
+                "_raw": e
+            })
+        return entries
+    except Exception:
+        return []
