@@ -18,7 +18,7 @@ def test_build_ffmpeg_tag_command_basic():
     }
     # Test default in-place replacement
     cmd = build_ffmpeg_tag_command(tags)
-    assert cmd.startswith("FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;")
+    assert cmd.startswith('FILE="$HOME/media/music/ARTYSTA/ALBUM/piosenka.mp3";')
     assert 'ffmpeg -y -i "$FILE" -c copy' in cmd
     assert "-metadata 'title=Smells Like Teen Spirit'" in cmd
     assert "-metadata artist=Nirvana" in cmd or "-metadata 'artist=Nirvana'" in cmd
@@ -75,7 +75,7 @@ def test_parse_spotdl_song_metadata():
     assert parsed["year"] == "1991"
     assert parsed["track_number"] == "3"
     assert parsed["cover_url"] == "https://i.scdn.co/image/ab67616d0000b273"
-    assert "FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;" in parsed["command"]
+    assert 'FILE="$HOME/media/music/ARTYSTA/ALBUM/piosenka.mp3";' in parsed["command"]
     assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in parsed["command"]
 
 
@@ -105,7 +105,7 @@ def test_fetch_spotify_metadata_success(tmp_path):
         assert meta["album"] == "Nevermind"
         assert meta["year"] == "1991"
         assert meta["track_number"] == "2"
-        assert "FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;" in meta["command"]
+        assert 'FILE="$HOME/media/music/ARTYSTA/ALBUM/piosenka.mp3";' in meta["command"]
         assert "-id3v2_version" in meta["command"]
         assert "https://image.url" in meta["command"]
         assert 'mv -f "${FILE}_temp.mp3" "$FILE"' in meta["command"]
@@ -121,7 +121,7 @@ def test_build_ffmpeg_tag_command_with_cover_art():
         "cover_url": "https://i.scdn.co/image/ab67616d0000b273"
     }
     cmd = build_ffmpeg_tag_command(tags)
-    assert cmd.startswith("FILE=~/media/music/ARTYSTA/ALBUM/piosenka.mp3;")
+    assert cmd.startswith('FILE="$HOME/media/music/ARTYSTA/ALBUM/piosenka.mp3";')
     assert 'ffmpeg -y -i "$FILE"' in cmd
     assert '-i "https://i.scdn.co/image/ab67616d0000b273"' in cmd
     assert "-map 0:a -map 1:v" in cmd

@@ -37,7 +37,10 @@ def build_ffmpeg_tag_command(
     meta_str = f" {' '.join(meta_args)}" if meta_args else ""
 
     if replace_in_place:
-        file_assign = f"FILE={placeholder};" if placeholder.startswith("~") else f'FILE="{placeholder}";'
+        p_clean = placeholder
+        if p_clean.startswith("~/"):
+            p_clean = "$HOME/" + p_clean[2:]
+        file_assign = f'FILE="{p_clean}";'
         if cover_url:
             cmd = (
                 f'{file_assign} '
