@@ -1,22 +1,24 @@
 <div align="center">
   <img src="frontend/assets/logo_small.png" alt="Downloadeusz Logo" width="150" />
-  <h1>Downloadeusz (v1.3)</h1>
-  <p><strong>A modern, self-hosted Web UI for SpotDL and yt-dlp with deep Navidrome integration</strong></p>
+  <h1>Downloadeusz (v2.0)</h1>
+  <p><strong>A modern, self-hosted Web UI for SpotDL, yt-dlp, and Soulseek (slskd) with deep Navidrome integration</strong></p>
 </div>
 
 ---
 
 **Downloadeusz** is a lightweight, Dockerized web application that allows you to easily download music (individual tracks, entire albums, and massive playlists from Spotify and YouTube) directly to your home server (e.g., NAS / Raspberry Pi).
 
-The standout feature of Downloadeusz is its **direct integration with Navidrome via the Subsonic API**. The app bypasses the common read-only `.m3u` playlist limitation. It dynamically translates downloaded files into internal Navidrome IDs and automatically creates a 100% native, fully editable playlist in the background, ready to be enjoyed on clients like Substreamer!
+The standout features of Downloadeusz are its **direct integration with Navidrome via the Subsonic API** and **Soulseek (slskd) library organization**. The app bypasses the common read-only `.m3u` playlist limitation by translating downloaded files into internal Navidrome IDs and generating native playlists. In v2.0, it automatically checks Navidrome before downloading to prevent redownloading high-quality tracks (e.g., FLACs) and can organize your Soulseek downloads into the same uniform folder hierarchy.
 
 ## ✨ Key Features
 
 - 🎨 **Modern & Responsive (Bento UI)**: Designed with a sleek Glassmorphism aesthetic. It looks stunning on both mobile devices and desktops. Fully customizable (custom wallpapers, background blur intensity, gradient saturation, and accent colors).
 - 🎵 **SpotDL & YT-DLP Under the Hood**: Download from YouTube, YouTube Music, Spotify, and Soundcloud while preserving full metadata (album art, ID3 tags).
-- 📡 **Live Terminal (SSE)**: Monitor your download process in real-time with a terminal window streamed directly to your browser. No page refreshes required!
-- 🎶 **Native Navidrome Playlists**: Downloadeusz cleverly uses `.m3u` files as temporary maps to connect with your Navidrome instance, translating files to internal IDs and generating a fully-fledged native playlist (with an option to make it Public!).
-- ⚠️ **Smart Error Handling**: A slide-out panel (accessible via a floating warning icon) alerts you if a specific song from a Spotify playlist couldn't be found, providing a direct link to the original track.
+- 🔄 **Soulseek (slskd) Auto-Organizer**: Automatically pulls completed downloads from your slskd daemon, parses audio tags (FLAC, MP3, M4A) via `mutagen`, and moves them into `{artist}/{year} - {album}/{track} {title}.{ext}`, then notifies Navidrome!
+- 🔍 **Smart Navidrome Deduplication**: Automatically queries Navidrome before downloading Spotify/YouTube tracks. Skip songs already in your library (toggle between "FLAC / Lossless only" or "Any format").
+- 📡 **Live Terminal (SSE) & Status Bar**: Monitor downloads and Soulseek organization in real-time. Instant connection test buttons and health status indicators for Navidrome and slskd.
+- 🎶 **Native Navidrome Playlists**: Downloadeusz translates temporary `.m3u` files into internal Navidrome IDs and creates fully editable native playlists.
+- ⚠️ **Smart Error Handling**: A slide-out panel alerts you if a specific song couldn't be found, with direct links to the original track.
 
 ## 🚀 Installation & Setup (Docker)
 
@@ -37,14 +39,23 @@ services:
       - "8000:8000"
     volumes:
       - ~/media/music:/downloads
+      - ~/media/slskd/complete:/slskd_downloads
       - ~/spotdl:/spotdl_config
       - ~/media/wallpapers:/app/frontend/assets/wallpapers
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - DOWNLOADS_DIR=/downloads
+      - SLSKD_DOWNLOADS_DIR=/slskd_downloads
+      - SPOTDL_CONFIG_DIR=/spotdl_config
+      - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
 ```
 
 > **Important:** Adjust the paths on the left side of the colon to match your server's directory structure.
-> - `/downloads` is the destination for downloaded music (ideally, mount your Navidrome music folder here).
-> - `/spotdl_config` stores cookies like `youtube_cookies.txt` (if you use them) and temporary logs.
-> - `/app/frontend/assets/wallpapers` allows you to upload custom wallpapers available in the appearance settings menu.
+> - `/downloads` is the destination for downloaded music (mount your Navidrome music folder here).
+> - `/slskd_downloads` is where your slskd (Soulseek) downloads complete.
+> - `/spotdl_config` stores cookies like `youtube_cookies.txt` and logs.
+> - `/app/frontend/assets/wallpapers` allows you to upload custom wallpapers.
 
 3. Start the container:
 ```bash
@@ -52,16 +63,20 @@ docker compose up --build -d
 ```
 4. Open your browser and navigate to: `http://<YOUR-SERVER-IP>:8000`
 
-## ⚙️ Navidrome Integration
+## ⚙️ Navidrome & Soulseek Integration
 
-To take full advantage of the Navidrome playlist integration:
 1. Open settings (the gear icon in the top right corner).
-2. Scroll down to the **Navidrome Integration** section.
-3. Enter your Navidrome `URL` (e.g., `http://your-server-ip:4533`), `Username`, and `Password`.
-4. (Optional) Check the "Public playlist" toggle to automatically share the downloaded playlist with other users on your server.
-*(Your credentials are saved securely and locally in your browser's Local Storage).*
+2. **Navidrome Integration**:
+   - Enter your Navidrome `URL` (e.g., `http://your-server-ip:4533`), `Username`, and `Password`.
+   - Click **"Testuj połączenie"** to verify connectivity.
+   - (Optional) Toggle "Public playlist" for shared playlists.
+3. **Soulseek (slskd) Integration**:
+   - Enter your slskd `URL` (e.g., `http://your-server-ip:5030`) and `API Key`.
+   - Click **"Testuj połączenie"** to verify access to transfers.
+   - Click **"Uporządkuj pliki z Soulseeka"** to import and organize downloaded FLAC/MP3 files into your library.
 
 ## 🛠️ Tech Stack
-- **Backend:** Python (FastAPI, asyncio, Uvicorn, Subsonic API wrappers)
-- **Frontend:** HTML5, Alpine.js, Tailwind CSS (via CDN)
+- **Backend:** Python (FastAPI, asyncio, Uvicorn, Mutagen, Subsonic & slskd API clients)
+- **Frontend:** HTML5, Alpine.js, Tailwind CSS (via CDN), Phosphor Icons
 - **Engines:** SpotDL, yt-dlp, Deno (for youtube-music modules)
+
