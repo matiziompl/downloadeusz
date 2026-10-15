@@ -118,13 +118,71 @@
                      <i class="ph ph-music-notes"></i> Integracja z Navidrome
                  </h3>
                  <div class="space-y-4">
-                     <input type="text" x-model="naviUrl" placeholder="URL (np. http://twoj-serwer:4533)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
-                     <input type="text" x-model="naviUser" placeholder="Nazwa użytkownika" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
-                     <input type="password" x-model="naviPass" placeholder="Hasło" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30">
+                     <input type="text" x-model="naviUrl" placeholder="URL (np. http://twoj-serwer:4533)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
+                     <input type="text" x-model="naviUser" placeholder="Nazwa użytkownika" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
+                     <input type="password" x-model="naviPass" placeholder="Hasło" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
                      <label class="flex items-center gap-3 cursor-pointer mt-2 group">
                          <input type="checkbox" x-model="naviSync" class="sr-only peer">
                          <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="naviSync ? `background-color: ${getEffectiveColor()}` : ''"></div>
                          <span class="text-sm font-medium text-white/80 group-hover:text-white transition-colors">Wymuś skanowanie i usuń .m3u</span>
+                     </label>
+                     <button @click="testNavidrome()" :disabled="testingNavi" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                         <i class="ph ph-spinner animate-spin text-sm" x-show="testingNavi" style="display: none;"></i>
+                         <i class="ph ph-plugs text-sm" x-show="!testingNavi"></i>
+                         <span>Testuj połączenie</span>
+                     </button>
+                     <div x-show="naviStatus.tested && naviStatus.msg" x-transition class="text-xs p-3 rounded-xl border flex items-center gap-2" :class="naviStatus.ok ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border-rose-500/20'" style="display: none;">
+                         <i :class="naviStatus.ok ? 'ph ph-check-circle' : 'ph ph-warning-circle'" class="text-base flex-shrink-0"></i>
+                         <span x-text="naviStatus.msg"></span>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- Soulseek (slskd) Integration -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">
+                     <i class="ph ph-waveform"></i> Integracja z Soulseek (slskd)
+                 </h3>
+                 <div class="space-y-4">
+                     <input type="text" x-model="slskdUrl" placeholder="np. http://localhost:5030" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
+                     <input type="password" x-model="slskdApiKey" placeholder="Klucz API slskd" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-colors">
+                     <button @click="testSlskd()" :disabled="testingSlskd" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                         <i class="ph ph-spinner animate-spin text-sm" x-show="testingSlskd" style="display: none;"></i>
+                         <i class="ph ph-plugs text-sm" x-show="!testingSlskd"></i>
+                         <span>Testuj połączenie</span>
+                     </button>
+                     <div x-show="slskdStatus.tested && slskdStatus.msg" x-transition class="text-xs p-3 rounded-xl border flex items-center gap-2" :class="slskdStatus.ok ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border-rose-500/20'" style="display: none;">
+                         <i :class="slskdStatus.ok ? 'ph ph-check-circle' : 'ph ph-warning-circle'" class="text-base flex-shrink-0"></i>
+                         <span x-text="slskdStatus.msg"></span>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- Service Status Display Mode -->
+             <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 class="text-lg font-medium mb-4 text-white/80 flex items-center gap-2">
+                     <i class="ph ph-broadcast"></i> Wyświetlanie statusu usług
+                 </h3>
+                 <div class="flex flex-col gap-2">
+                     <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="statusDisplayMode === 'errors_only' ? `border-color: ${getEffectiveColor()}` : ''">
+                         <input type="radio" x-model="statusDisplayMode" value="errors_only" class="hidden">
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                             <div class="w-2 h-2 rounded-full" x-show="statusDisplayMode === 'errors_only'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                         </div>
+                         <div>
+                             <span class="text-sm font-medium">Tylko w przypadku błędu</span>
+                             <p class="text-xs text-white/50">Ukryj, gdy wszystko działa prawidłowo</p>
+                         </div>
+                     </label>
+                     <label class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors border border-transparent" :style="statusDisplayMode === 'always' ? `border-color: ${getEffectiveColor()}` : ''">
+                         <input type="radio" x-model="statusDisplayMode" value="always" class="hidden">
+                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                             <div class="w-2 h-2 rounded-full" x-show="statusDisplayMode === 'always'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                         </div>
+                         <div>
+                             <span class="text-sm font-medium">Zawsze</span>
+                             <p class="text-xs text-white/50">Baner statusu usług jest stale widoczny</p>
+                         </div>
                      </label>
                  </div>
              </div>
@@ -152,7 +210,7 @@
 
              <!-- Version -->
              <div class="mt-8 text-center">
-                 <span class="text-xs font-medium text-white/30 tracking-wider">v1.3</span>
+                 <span class="text-xs font-medium text-white/30 tracking-wider">v2.0</span>
              </div>
 
          </div>
@@ -239,6 +297,81 @@
                            :style="`--tw-ring-color: ${getEffectiveColor()}80`">
                 </div>
 
+                <!-- Service Status Banner -->
+                <div x-show="shouldShowStatusBanner()" 
+                     x-transition:enter="transition ease-out duration-200" 
+                     x-transition:enter-start="opacity-0 -translate-y-2" 
+                     x-transition:enter-end="opacity-100 translate-y-0" 
+                     x-transition:leave="transition ease-in duration-150" 
+                     x-transition:leave-start="opacity-100 translate-y-0" 
+                     x-transition:leave-end="opacity-0 -translate-y-2" 
+                     class="bg-black/40 border border-white/10 rounded-2xl p-4 mb-6 backdrop-blur-md" 
+                     style="display: none;">
+                    <div class="flex flex-col gap-2.5">
+                        
+                        <!-- Navidrome Status Item -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-white/5 border border-white/5">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      :class="{
+                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !naviUrl || (!naviStatus.tested && !testingNavi),
+                                          'bg-amber-400 animate-pulse': testingNavi,
+                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': naviUrl && naviStatus.tested && naviStatus.ok,
+                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': naviUrl && naviStatus.tested && !naviStatus.ok
+                                      }"></span>
+                                <span class="text-xs sm:text-sm font-medium text-white/90 truncate"
+                                      :title="naviStatus.msg || ''"
+                                      x-text="!naviUrl ? 'Navidrome: Nieskonfigurowany' : (testingNavi ? 'Navidrome: Sprawdzanie...' : (naviStatus.tested ? (naviStatus.ok ? 'Navidrome: Połączono' : 'Navidrome: Błąd połączenia') : 'Navidrome: Nieskonfigurowany'))">
+                                </span>
+                            </div>
+                            <button @click="testNavidrome()" 
+                                    :disabled="testingNavi" 
+                                    title="Testuj połączenie z Navidrome"
+                                    class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i class="ph ph-spinner animate-spin text-sm" x-show="testingNavi" style="display: none;"></i>
+                                <i class="ph ph-plugs text-sm" x-show="!testingNavi"></i>
+                                <span>Testuj</span>
+                            </button>
+                        </div>
+
+                        <!-- Soulseek (slskd) Status Item -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-white/5 border border-white/5">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      :class="{
+                                          'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]': !slskdUrl || (!slskdStatus.tested && !testingSlskd),
+                                          'bg-amber-400 animate-pulse': testingSlskd,
+                                          'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]': slskdUrl && slskdStatus.tested && slskdStatus.ok,
+                                          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]': slskdUrl && slskdStatus.tested && !slskdStatus.ok
+                                      }"></span>
+                                <span class="text-xs sm:text-sm font-medium text-white/90 truncate"
+                                      :title="slskdStatus.msg || ''"
+                                      x-text="!slskdUrl ? 'Soulseek: Nieskonfigurowany' : (testingSlskd ? 'Soulseek: Sprawdzanie...' : (slskdStatus.tested ? (slskdStatus.ok ? 'Soulseek: Połączono' : 'Soulseek: Błąd połączenia') : 'Soulseek: Nieskonfigurowany'))">
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-wrap self-start sm:self-auto">
+                                <button @click="testSlskd()" 
+                                        :disabled="testingSlskd" 
+                                        title="Testuj połączenie z Soulseek"
+                                        class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="ph ph-spinner animate-spin text-sm" x-show="testingSlskd" style="display: none;"></i>
+                                    <i class="ph ph-plugs text-sm" x-show="!testingSlskd"></i>
+                                    <span>Testuj</span>
+                                </button>
+                                <button @click="organizeSlskd()" 
+                                        :disabled="organizingSlskd" 
+                                        title="Uporządkuj pliki pobrane z Soulseek"
+                                        class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="ph ph-spinner animate-spin text-sm" x-show="organizingSlskd" style="display: none;"></i>
+                                    <i class="ph ph-folder-notch-open text-sm" x-show="!organizingSlskd"></i>
+                                    <span>Uporządkuj pliki</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
                 <!-- spotdl Advanced Flags -->
                 <div x-show="selectedTool === 'spotdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
                     
@@ -293,6 +426,35 @@
                                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm outline-none focus:border-white/30 transition-colors placeholder-white/30">
                                 <p class="text-xs text-white/40 mt-1 pl-1">Zostawienie pustego użyje zmiennej {list}</p>
                             </div>
+                        </div>
+                    </div>
+
+                    <hr class="border-white/5">
+
+                    <!-- Navidrome Deduplication -->
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" x-model="flags.check_navidrome" class="sr-only peer">
+                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <span class="text-sm font-medium text-white/80">Sprawdź duplikaty w Navidrome</span>
+                        </label>
+                        
+                        <div x-show="flags.check_navidrome" x-transition class="pl-13 space-y-2.5">
+                            <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
+                                <input type="radio" x-model="flags.navidrome_skip_mode" value="flac_only" class="hidden">
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'flac_only'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                                </div>
+                                <span>Pomijaj tylko wersje FLAC / Lossless</span>
+                            </label>
+                            
+                            <label class="flex items-center gap-3 cursor-pointer text-sm text-white/80 hover:text-white transition-colors">
+                                <input type="radio" x-model="flags.navidrome_skip_mode" value="all" class="hidden">
+                                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center bg-black/50" :style="`border-color: ${getEffectiveColor()}`">
+                                    <div class="w-2 h-2 rounded-full" x-show="flags.navidrome_skip_mode === 'all'" :style="`background-color: ${getEffectiveColor()}`"></div>
+                                </div>
+                                <span>Pomijaj dowolny format (FLAC lub MP3)</span>
+                            </label>
                         </div>
                     </div>
                     

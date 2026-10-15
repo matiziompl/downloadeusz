@@ -10,6 +10,16 @@ function appData() {
         eventSource: null,
         logs: [],
         
+        // Services & Integrations
+        slskdUrl: localStorage.getItem('slskdUrl') || '',
+        slskdApiKey: localStorage.getItem('slskdApiKey') || '',
+        statusDisplayMode: localStorage.getItem('statusDisplayMode') || 'errors_only',
+        naviStatus: { tested: false, ok: false, msg: '' },
+        slskdStatus: { tested: false, ok: false, msg: '' },
+        testingNavi: false,
+        testingSlskd: false,
+        organizingSlskd: false,
+
         // Input Data
         url: '',
         selectedTool: 'spotdl', // Default to spotdl now as it has more features
@@ -25,7 +35,9 @@ function appData() {
             threads: 1,
             generate_m3u: false,
             public_playlist: false,
-            m3u_name: '' // empty means {list}
+            m3u_name: '', // empty means {list}
+            check_navidrome: false,
+            navidrome_skip_mode: 'flac_only'
         },
         
         // Settings / Appearance
@@ -73,6 +85,7 @@ function appData() {
             this.loadSettings();
             this.fetchWallpapers();
             this.fetchErrors();
+            this.checkServicesStatus();
             
             // Watch for changes and save to local storage
             this.$watch('showTitle', () => this.saveSettings());
@@ -83,14 +96,28 @@ function appData() {
             this.$watch('blurAmount', () => this.saveSettings());
             this.$watch('whiteGradient', () => this.saveSettings());
             this.$watch('logMode', () => this.saveSettings());
+            this.$watch('statusDisplayMode', value => {
+                localStorage.setItem('statusDisplayMode', value);
+                this.saveSettings();
+            });
             this.$watch('flags', () => this.saveSettings(), { deep: true });
             
             // Watchers for navidrome credentials
-            this.$watch('naviUrl', value => localStorage.setItem('naviUrl', value));
+            this.$watch('naviUrl', value => {
+                localStorage.setItem('naviUrl', value);
+                this.naviStatus = { tested: false, ok: false, msg: '' };
+            });
             this.$watch('naviUser', value => localStorage.setItem('naviUser', value));
             this.$watch('naviPass', value => localStorage.setItem('naviPass', value));
             this.$watch('naviSync', value => localStorage.setItem('naviSync', value));
             
+            // Watchers for soulseek credentials
+            this.$watch('slskdUrl', value => {
+                localStorage.setItem('slskdUrl', value);
+                this.slskdStatus = { tested: false, ok: false, msg: '' };
+            });
+            this.$watch('slskdApiKey', value => localStorage.setItem('slskdApiKey', value));
+
             this.$nextTick(() => {
                 this.updateExtractedColor();
             });
@@ -110,9 +137,11 @@ function appData() {
                 blurAmount: this.blurAmount,
                 whiteGradient: this.whiteGradient,
                 logMode: this.logMode,
+                statusDisplayMode: this.statusDisplayMode,
                 flags: this.flags
             };
             localStorage.setItem('downloadeusz_settings', JSON.stringify(settings));
+            localStorage.setItem('statusDisplayMode', this.statusDisplayMode);
         },
         
         loadSettings() {
@@ -128,11 +157,20 @@ function appData() {
                     this.blurAmount = settings.blurAmount || 0;
                     this.whiteGradient = settings.whiteGradient || 0;
                     this.logMode = settings.logMode || 'advanced';
+                    this.statusDisplayMode = settings.statusDisplayMode || localStorage.getItem('statusDisplayMode') || 'errors_only';
                     
                     if (settings.flags) {
-                        this.flags = { ...this.flags, ...settings.flags };
+                        this.flags = {
+                            ...this.flags,
+                            ...settings.flags,
+                            check_navidrome: settings.flags.check_navidrome ?? false,
+                            navidrome_skip_mode: settings.flags.navidrome_skip_mode || 'flac_only'
+                        };
                     }
                 } catch (e) {}
+            }
+            if (!this.statusDisplayMode) {
+                this.statusDisplayMode = localStorage.getItem('statusDisplayMode') || 'errors_only';
             }
         },
         
@@ -259,6 +297,7 @@ function appData() {
                 if (event.data.includes('[Zakończono') || event.data.includes('[Błąd]')) {
                     this.eventSource.close();
                     this.loading = false;
+                    this.organizingSlskd = false;
                     this.fetchErrors(); // Fetch errors after download finishes
                 }
             };
@@ -266,9 +305,141 @@ function appData() {
             this.eventSource.onerror = () => {
                 this.eventSource.close();
                 this.loading = false;
+                this.organizingSlskd = false;
                 this.logs.push("Utracono połączenie z logami.");
                 this.fetchErrors();
             };
+        },
+        
+        shouldShowStatusBanner() {
+            if (this.statusDisplayMode === 'always') return true;
+            const naviNotOk = !this.naviUrl || (this.naviStatus.tested && !this.naviStatus.ok);
+            const slskdNotOk = !this.slskdUrl || (this.slskdStatus.tested && !this.slskdStatus.ok);
+            return naviNotOk || slskdNotOk;
+        },
+
+        async testNavidrome() {
+            if (!this.naviUrl) {
+                this.naviStatus = { tested: false, ok: false, msg: 'Brak adresu URL Navidrome' };
+                return;
+            }
+            this.testingNavi = true;
+            try {
+                const res = await fetch('/api/test/navidrome', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: this.naviUrl,
+                        user: this.naviUser,
+                        password: this.naviPass
+                    })
+                });
+                const data = await res.json();
+                this.naviStatus = {
+                    tested: true,
+                    ok: !!data.ok,
+                    msg: data.message || (data.ok ? 'Połączono pomyślnie z Navidrome!' : 'Błąd połączenia')
+                };
+            } catch (e) {
+                this.naviStatus = {
+                    tested: true,
+                    ok: false,
+                    msg: 'Nie udało się połączyć z serwerem'
+                };
+            } finally {
+                this.testingNavi = false;
+            }
+        },
+
+        async testSlskd() {
+            if (!this.slskdUrl) {
+                this.slskdStatus = { tested: false, ok: false, msg: 'Brak adresu URL Soulseek (slskd)' };
+                return;
+            }
+            this.testingSlskd = true;
+            try {
+                const res = await fetch('/api/test/slskd', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: this.slskdUrl,
+                        api_key: this.slskdApiKey
+                    })
+                });
+                const data = await res.json();
+                this.slskdStatus = {
+                    tested: true,
+                    ok: !!data.ok,
+                    msg: data.message || (data.ok ? 'Połączono pomyślnie z Soulseek (slskd)!' : 'Błąd połączenia')
+                };
+            } catch (e) {
+                this.slskdStatus = {
+                    tested: true,
+                    ok: false,
+                    msg: 'Nie udało się połączyć z serwerem'
+                };
+            } finally {
+                this.testingSlskd = false;
+            }
+        },
+
+        async checkServicesStatus() {
+            const promises = [];
+            if (this.naviUrl) {
+                promises.push(this.testNavidrome());
+            } else {
+                this.naviStatus = { tested: false, ok: false, msg: '' };
+            }
+            if (this.slskdUrl) {
+                promises.push(this.testSlskd());
+            } else {
+                this.slskdStatus = { tested: false, ok: false, msg: '' };
+            }
+            if (promises.length > 0) {
+                await Promise.allSettled(promises);
+            }
+        },
+
+        async organizeSlskd() {
+            if (!this.slskdUrl) {
+                this.statusMsg = 'Brak adresu URL Soulseek (slskd). Skonfiguruj go w ustawieniach.';
+                this.statusError = true;
+                return;
+            }
+            this.organizingSlskd = true;
+            this.statusMsg = '';
+            this.statusError = false;
+            this.logs = ['Rozpoczynanie porządkowania pobranych plików Soulseek...'];
+
+            try {
+                const response = await fetch('/api/slskd/organize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        slskd_url: this.slskdUrl,
+                        slskd_api_key: this.slskdApiKey,
+                        navi_sync: this.naviSync,
+                        navi_url: this.naviUrl,
+                        navi_user: this.naviUser,
+                        navi_pass: this.naviPass
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.task_id) {
+                    this.statusMsg = data.message;
+                    this.connectLogs(data.task_id);
+                } else {
+                    this.statusError = true;
+                    this.statusMsg = data.detail || 'Wystąpił błąd przy zlecaniu porządkowania.';
+                    this.organizingSlskd = false;
+                }
+            } catch (error) {
+                this.statusError = true;
+                this.statusMsg = 'Błąd komunikacji z serwerem.';
+                this.organizingSlskd = false;
+            }
         },
         
         async startDownload() {
