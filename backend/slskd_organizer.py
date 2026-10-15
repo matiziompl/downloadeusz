@@ -91,25 +91,31 @@ def build_target_path(tags: Dict[str, str], ext: str, base_dir: str) -> str:
     return os.path.join(base_dir, artist, folder, filename)
 
 def find_file_in_dir(search_path: str, base_dir: str) -> Optional[str]:
-    """Find file in base_dir by normalized path or basename."""
-    # Normalize slashes
-    norm_rel = search_path.replace('\\', '/').lstrip('/')
-    candidate = os.path.join(base_dir, norm_rel)
-    if os.path.isfile(candidate):
+    """Find file in base_dir by normalized path or basename, strictly preventing directory traversal."""
+    base_abs = os.path.abspath(base_dir)
+    # Normalize slashes and prevent directory traversal
+    norm_rel = os.path.normpath(search_path.replace('\\', '/')).lstrip('/\\')
+    
+    # Check direct candidate inside base_dir
+    candidate = os.path.abspath(os.path.join(base_abs, norm_rel))
+    if candidate.startswith(base_abs + os.sep) and os.path.isfile(candidate):
         return candidate
 
     # Try removing the top directory (e.g. username directory)
-    parts = norm_rel.split('/')
+    parts = [p for p in norm_rel.split(os.sep) if p and p != '..']
     if len(parts) > 1:
-        candidate = os.path.join(base_dir, *parts[1:])
-        if os.path.isfile(candidate):
-            return candidate
+        sub_candidate = os.path.abspath(os.path.join(base_abs, *parts[1:]))
+        if sub_candidate.startswith(base_abs + os.sep) and os.path.isfile(sub_candidate):
+            return sub_candidate
 
-    # Fallback: search for filename recursively in base_dir
+    # Fallback: search for filename recursively strictly within base_dir
     target_basename = os.path.basename(norm_rel)
-    for root, _, files in os.walk(base_dir):
-        if target_basename in files:
-            return os.path.join(root, target_basename)
+    if target_basename and target_basename != '..':
+        for root, _, files in os.walk(base_abs):
+            if target_basename in files:
+                found = os.path.join(root, target_basename)
+                if found.startswith(base_abs + os.sep):
+                    return found
 
     return None
 
@@ -141,6 +147,9 @@ def organize_slskd_downloads(
     if not os.path.exists(source_dir):
         log(f"[Soulseek] Błąd: Folder źródłowy nie istnieje: {source_dir}")
         return stats
+
+    if not slskd_url.startswith(('http://', 'https://')):
+        slskd_url = f"http://{slskd_url}"
 
     # 1. Fetch completed transfers from slskd
     api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
@@ -205,6 +214,11 @@ def organize_slskd_downloads(
             
             if os.path.abspath(src_file) == os.path.abspath(target_path):
                 log(f"[Soulseek] Plik jest już w docelowej lokalizacji: {os.path.basename(target_path)}")
+                stats["skipped"] += 1
+                continue
+
+            if os.path.exists(target_path):
+                log(f"[Soulseek] Pominięto (plik docelowy już istnieje w bibliotece): {os.path.relpath(target_path, dest_dir)}")
                 stats["skipped"] += 1
                 continue
 

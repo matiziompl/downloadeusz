@@ -81,38 +81,25 @@ async def test_navidrome(req: NaviTestRequest):
     if not req.url:
         return {"ok": False, "message": "Brak adresu URL Navidrome"}
     try:
-        import urllib.request
-        import urllib.parse
-        import hashlib
-        import secrets
-        import json
-
-        salt = secrets.token_hex(6)
-        token = hashlib.md5((req.password + salt).encode('utf-8')).hexdigest()
-        params = {
-            "u": req.user,
-            "t": token,
-            "s": salt,
-            "v": "1.16.1",
-            "c": "downloadeusz",
-            "f": "json"
-        }
-        query = urllib.parse.urlencode(params)
-        api_url = f"{req.url.rstrip('/')}/rest/ping.view?{query}"
-        request_obj = urllib.request.Request(api_url)
-        with urllib.request.urlopen(request_obj, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            sub_resp = data.get("subsonic-response", {})
-            if sub_resp.get("status") == "ok":
-                server_version = sub_resp.get("serverVersion", sub_resp.get("version", ""))
-                return {
-                    "ok": True,
-                    "message": "Połączono pomyślnie z Navidrome!",
-                    "server_version": server_version
-                }
-            else:
-                error = sub_resp.get("error", {})
-                return {"ok": False, "message": f"Błąd Navidrome: {error.get('message', 'Nieznany błąd')}"}
+        from navidrome_dedup import subsonic_request
+        data = subsonic_request(
+            base_url=req.url,
+            user=req.user,
+            password=req.password,
+            endpoint="ping.view",
+            timeout=5
+        )
+        sub_resp = data.get("subsonic-response", {})
+        if sub_resp.get("status") == "ok":
+            server_version = sub_resp.get("serverVersion", sub_resp.get("version", ""))
+            return {
+                "ok": True,
+                "message": "Połączono pomyślnie z Navidrome!",
+                "server_version": server_version
+            }
+        else:
+            error = sub_resp.get("error", {})
+            return {"ok": False, "message": f"Błąd Navidrome: {error.get('message', 'Nieznany błąd')}"}
     except Exception as e:
         return {"ok": False, "message": f"Nie udało się połączyć z Navidrome: {str(e)}"}
 
@@ -122,9 +109,11 @@ async def test_slskd(req: SlskdTestRequest):
         return {"ok": False, "message": "Brak adresu URL Soulseek (slskd)"}
     try:
         import urllib.request
-        import json
+        slskd_url = req.url
+        if not slskd_url.startswith(('http://', 'https://')):
+            slskd_url = f"http://{slskd_url}"
 
-        api_url = f"{req.url.rstrip('/')}/api/v0/transfers/downloads"
+        api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
         headers = {}
         if req.api_key:
             headers["X-API-Key"] = req.api_key
@@ -171,25 +160,15 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             if request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
                 log_cb("\n[Navidrome] Uruchamianie skanowania biblioteki po uporządkowaniu...")
                 try:
-                    import urllib.request
-                    import urllib.parse
-                    import hashlib
-                    import secrets
-                    salt = secrets.token_hex(6)
-                    token = hashlib.md5((request.navi_pass + salt).encode('utf-8')).hexdigest()
-                    params = {
-                        "u": request.navi_user,
-                        "t": token,
-                        "s": salt,
-                        "v": "1.16.1",
-                        "c": "downloadeusz",
-                        "f": "json"
-                    }
-                    query = urllib.parse.urlencode(params)
-                    api_url = f"{request.navi_url.rstrip('/')}/rest/startScan.view?{query}"
-                    req = urllib.request.Request(api_url)
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        log_cb("[Navidrome] Skanowanie zostało pomyślnie zlecone!")
+                    from navidrome_dedup import subsonic_request
+                    subsonic_request(
+                        base_url=request.navi_url,
+                        user=request.navi_user,
+                        password=request.navi_pass,
+                        endpoint="startScan.view",
+                        timeout=10
+                    )
+                    log_cb("[Navidrome] Skanowanie zostało pomyślnie zlecone!")
                 except Exception as e:
                     log_cb(f"[Navidrome] Nie udało się wywołać skanowania: {e}")
 
@@ -250,6 +229,25 @@ def run_download_task(task_id: str, request: DownloadRequest):
 
                         if not kept:
                             f.write(f"\n[Deduplikacja] Wszystkie utwory ({len(skipped)}) znajdują się już w Twojej bibliotece Navidrome! Pomijam pobieranie.\n")
+                            if flags.get("generate_m3u") and request.navi_sync and request.navi_url and request.navi_user and request.navi_pass:
+                                f.write("[Navidrome] Tworzenie natywnej playlisty ze zindeksowanych utworów...\n")
+                                navi_song_ids = [s.get("_navidrome_id") for s in skipped if s.get("_navidrome_id")]
+                                if navi_song_ids:
+                                    derived_name = flags.get("m3u_name", "").strip()
+                                    if not derived_name or derived_name == "{list}":
+                                        derived_name = (song_list[0].get("list_name") if song_list else "") or "Nowa Playlista"
+                                    try:
+                                        from navidrome_dedup import subsonic_request
+                                        subsonic_request(
+                                            base_url=request.navi_url,
+                                            user=request.navi_user,
+                                            password=request.navi_pass,
+                                            endpoint="createPlaylist.view",
+                                            extra_params={"name": derived_name, "songId": navi_song_ids}
+                                        )
+                                        f.write(f"[Navidrome] Natywna playlista '{derived_name}' została utworzona pomyślnie z {len(navi_song_ids)} utworów!\n")
+                                    except Exception as pe:
+                                        f.write(f"[Navidrome] Ostrzeżenie przy tworzeniu playlisty: {pe}\n")
                             f.write("\n[Zakończono z kodem 0]\n")
                             try:
                                 os.remove(temp_spotdl_file)
@@ -297,8 +295,11 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 
             if flags.get("generate_m3u"):
                 m3u_name = flags.get("m3u_name", "{list}")
-                if not m3u_name.strip():
-                    m3u_name = "{list}"
+                if not m3u_name.strip() or m3u_name == "{list}":
+                    if target_source == temp_spotdl_file and 'song_list' in locals() and song_list:
+                        m3u_name = song_list[0].get("list_name") or song_list[0].get("album_name") or "{list}"
+                    else:
+                        m3u_name = "{list}"
                 cmd.extend(["--m3u", f"temp_dl_{m3u_name}.m3u"])
                 
         elif request.tool == "ytdl":
@@ -348,24 +349,16 @@ def run_download_task(task_id: str, request: DownloadRequest):
                     import glob
                     import json
                     
+                    from navidrome_dedup import subsonic_request
                     def call_navi(endpoint, extra_params=None):
-                        salt = secrets.token_hex(6)
-                        token = hashlib.md5((request.navi_pass + salt).encode('utf-8')).hexdigest()
-                        params = {
-                            "u": request.navi_user,
-                            "t": token,
-                            "s": salt,
-                            "v": "1.16.1",
-                            "c": "downloadeusz",
-                            "f": "json"
-                        }
-                        if extra_params:
-                            params.update(extra_params)
-                        query = urllib.parse.urlencode(params)
-                        api_url = f"{request.navi_url.rstrip('/')}/rest/{endpoint}?{query}"
-                        req = urllib.request.Request(api_url)
-                        with urllib.request.urlopen(req, timeout=10) as response:
-                            return json.loads(response.read().decode('utf-8'))
+                        return subsonic_request(
+                            base_url=request.navi_url,
+                            user=request.navi_user,
+                            password=request.navi_pass,
+                            endpoint=endpoint,
+                            extra_params=extra_params,
+                            timeout=10
+                        )
 
                     # 1. Start Scan
                     call_navi("startScan.view")
@@ -400,33 +393,18 @@ def run_download_task(task_id: str, request: DownloadRequest):
                             if song_ids:
                                 f.write(f"[Navidrome] Znaleziono {len(song_ids)} utworow. Tworzenie natywnej playlisty '{actual_playlist_name}'...\n")
                                 # 4. Create Native Playlist
-                                salt = secrets.token_hex(6)
-                                token = hashlib.md5((request.navi_pass + salt).encode('utf-8')).hexdigest()
-                                base_params = {
-                                    "u": request.navi_user,
-                                    "t": token,
-                                    "s": salt,
-                                    "v": "1.16.1",
-                                    "c": "downloadeusz",
-                                    "f": "json",
-                                    "name": actual_playlist_name
-                                }
-                                query = urllib.parse.urlencode(base_params)
-                                for sid in song_ids:
-                                    query += f"&songId={sid}"
+                                res_create = call_navi("createPlaylist.view", {
+                                    "name": actual_playlist_name,
+                                    "songId": song_ids
+                                })
+                                new_playlist = res_create.get("subsonic-response", {}).get("playlist", {})
+                                new_id = new_playlist.get("id")
                                     
-                                api_url = f"{request.navi_url.rstrip('/')}/rest/createPlaylist.view?{query}"
-                                req = urllib.request.Request(api_url)
-                                with urllib.request.urlopen(req, timeout=10) as response:
-                                    res_create = json.loads(response.read().decode('utf-8'))
-                                    new_playlist = res_create.get("subsonic-response", {}).get("playlist", {})
-                                    new_id = new_playlist.get("id")
-                                    
-                                    f.write("[Navidrome] Natywna playlista zostala utworzona pomyslnie!\n")
-                                    
-                                    if request.flags.get("public_playlist") and new_id:
-                                        f.write(f"[Navidrome] Ustawianie playlisty (ID: {new_id}) jako publicznej...\n")
-                                        call_navi("updatePlaylist.view", {"playlistId": new_id, "public": "true"})
+                                f.write("[Navidrome] Natywna playlista zostala utworzona pomyslnie!\n")
+                                
+                                if request.flags.get("public_playlist") and new_id:
+                                    f.write(f"[Navidrome] Ustawianie playlisty (ID: {new_id}) jako publicznej...\n")
+                                    call_navi("updatePlaylist.view", {"playlistId": new_id, "public": "true"})
                                         
                                 time.sleep(2)
                                 

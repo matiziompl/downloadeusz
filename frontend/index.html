@@ -210,7 +210,7 @@
 
              <!-- Version -->
              <div class="mt-8 text-center">
-                 <span class="text-xs font-medium text-white/30 tracking-wider">v2.0</span>
+                 <span class="text-xs font-medium text-white/60 tracking-wider">v2.0</span>
              </div>
 
          </div>
@@ -424,7 +424,7 @@
                             <div>
                                 <input type="text" x-model="flags.m3u_name" placeholder="Nazwa playlisty (zostaw puste by użyć domyślnej)" 
                                        class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm outline-none focus:border-white/30 transition-colors placeholder-white/30">
-                                <p class="text-xs text-white/40 mt-1 pl-1">Zostawienie pustego użyje zmiennej {list}</p>
+                                <p class="text-xs text-white/60 mt-1 pl-1">Zostawienie pustego użyje zmiennej {list}</p>
                             </div>
                         </div>
                     </div>
@@ -483,7 +483,7 @@
 
                 <!-- Command Preview -->
                 <div class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
-                    <p class="text-[10px] uppercase text-white/40 font-bold mb-1 flex items-center gap-2">
+                    <p class="text-[10px] uppercase text-white/60 font-bold mb-1 flex items-center gap-2">
                         <i class="ph ph-terminal"></i> Podgląd komendy
                     </p>
                     <div class="font-mono text-xs text-white/70 break-words whitespace-pre-wrap leading-relaxed opacity-80" x-text="getCommandPreview()"></div>
@@ -525,7 +525,7 @@
                     <template x-for="(log, index) in logs" :key="index">
                         <div x-text="log" class="break-words"></div>
                     </template>
-                    <div x-show="logs.length === 0" class="text-white/30 italic">Oczekuję na rozpoczęcie zadania...</div>
+                    <div x-show="logs.length === 0" class="text-white/60 italic">Oczekuję na rozpoczęcie zadania...</div>
                 </div>
             </div>
 

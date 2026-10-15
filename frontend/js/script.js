@@ -313,9 +313,10 @@ function appData() {
         
         shouldShowStatusBanner() {
             if (this.statusDisplayMode === 'always') return true;
-            const naviNotOk = !this.naviUrl || (this.naviStatus.tested && !this.naviStatus.ok);
-            const slskdNotOk = !this.slskdUrl || (this.slskdStatus.tested && !this.slskdStatus.ok);
-            return naviNotOk || slskdNotOk;
+            // In errors_only mode, only show if a configured service explicitly failed its connection test
+            const naviError = this.naviUrl && this.naviStatus.tested && !this.naviStatus.ok;
+            const slskdError = this.slskdUrl && this.slskdStatus.tested && !this.slskdStatus.ok;
+            return Boolean(naviError || slskdError);
         },
 
         async testNavidrome() {

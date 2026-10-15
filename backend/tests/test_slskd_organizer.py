@@ -12,11 +12,24 @@ from backend.slskd_organizer import (
 )
 
 def test_sanitize_filename():
-    assert sanitize_filename('AC/DC: "Back in Black"?') == "AC_DC_ _Back in Black__" or "_" in sanitize_filename('AC/DC')
+    assert sanitize_filename('AC/DC: "Back in Black"?') == "AC_DC_ _Back in Black__"
     # Must not contain invalid characters
     cleaned = sanitize_filename('Song: Title/Name? *test* <tag> | "quoted"')
     for bad_char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
         assert bad_char not in cleaned
+
+def test_find_file_in_dir_prevents_traversal(tmp_path):
+    from backend.slskd_organizer import find_file_in_dir
+    source_dir = tmp_path / "slskd_downloads"
+    source_dir.mkdir()
+    secret_file = tmp_path / "secret.txt"
+    secret_file.write_text("secret")
+
+    # Attempt path traversal
+    found = find_file_in_dir("../secret.txt", str(source_dir))
+    assert found is None
+    found_nested = find_file_in_dir("subdir/../../secret.txt", str(source_dir))
+    assert found_nested is None
 
 def test_build_target_path():
     tags = {

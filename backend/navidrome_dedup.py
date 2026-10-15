@@ -12,18 +12,32 @@ POLISH_TRANS = str.maketrans({
     'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z',
 })
 
+def strip_noise(title: str) -> str:
+    """Strip common noise phrases from titles like (Remastered 2011), (Official Video), [Live], etc."""
+    noise_patterns = [
+        r'\((?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe)[^)]*\)',
+        r'\[(?:official|remaster(?:ed)?|live|audio|video|feat\.?|ft\.?|mono|stereo|deluxe)[^\]]*\]',
+        r'-\s*(?:official|remaster(?:ed)?|live|audio|video).*$',
+    ]
+    res = title
+    for p in noise_patterns:
+        res = re.sub(p, '', res, flags=re.IGNORECASE)
+    return res.strip()
+
 def clean_string(s: str) -> str:
-    """Normalize and clean string for resilient fuzzy comparison."""
+    """Normalize and clean string for resilient fuzzy comparison across all unicode languages."""
     if not s:
         return ""
     # Transliterate polish letters first
-    s_polish = s.translate(POLISH_TRANS)
+    s_clean = s.translate(POLISH_TRANS)
+    # Strip noise phrases first
+    s_clean = strip_noise(s_clean)
     # Normalize unicode to NFKD (decomposes characters with accents)
-    s_norm = unicodedata.normalize('NFKD', s_polish)
+    s_norm = unicodedata.normalize('NFKD', s_clean)
     # Remove combining characters (accents)
     s_no_accents = ''.join(c for c in s_norm if not unicodedata.combining(c))
-    # Replace non-alphanumeric with spaces and lowercase
-    cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', s_no_accents).lower()
+    # Replace non-alphanumeric (keeping unicode letters/digits across languages) with spaces
+    cleaned = re.sub(r'[^\w\s]', ' ', s_no_accents, flags=re.UNICODE).lower()
     # Collapse multiple spaces
     return ' '.join(cleaned.split())
 
@@ -37,6 +51,39 @@ def is_lossless(suffix: str, content_type: str = "") -> bool:
         return True
     return False
 
+def subsonic_request(
+    base_url: str,
+    user: str,
+    password: str,
+    endpoint: str,
+    extra_params: Optional[Dict[str, Any]] = None,
+    timeout: int = 10
+) -> Dict[str, Any]:
+    """Reusable Subsonic API client with authentication and URL scheme normalization."""
+    if not base_url:
+        raise ValueError("Adres URL Navidrome jest wymagany")
+    if not base_url.startswith(('http://', 'https://')):
+        base_url = f"http://{base_url}"
+
+    salt = secrets.token_hex(6)
+    token = hashlib.md5((password + salt).encode('utf-8')).hexdigest()
+    params = {
+        "u": user,
+        "t": token,
+        "s": salt,
+        "v": "1.16.1",
+        "c": "downloadeusz",
+        "f": "json"
+    }
+    if extra_params:
+        params.update(extra_params)
+
+    query = urllib.parse.urlencode(params, doseq=True)
+    api_url = f"{base_url.rstrip('/')}/rest/{endpoint}?{query}"
+    req = urllib.request.Request(api_url)
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
 def search_navidrome_song(
     navi_url: str,
     navi_user: str,
@@ -48,59 +95,61 @@ def search_navidrome_song(
     if not navi_url or not navi_user or not navi_pass:
         return None
 
-    salt = secrets.token_hex(6)
-    token = hashlib.md5((navi_pass + salt).encode('utf-8')).hexdigest()
-    
+    c_target_title = clean_string(title)
+    c_target_artist = clean_string(artist)
+
+    # If title is empty after cleaning, never match
+    if not c_target_title:
+        return None
+
     clean_search_query = f"{artist} {title}".strip()
-    params = {
-        "u": navi_user,
-        "t": token,
-        "s": salt,
-        "v": "1.16.1",
-        "c": "downloadeusz",
-        "f": "json",
-        "query": clean_search_query,
-        "songCount": 10,
-        "albumCount": 0,
-        "artistCount": 0
-    }
-    query_str = urllib.parse.urlencode(params)
-    api_url = f"{navi_url.rstrip('/')}/rest/search3.view?{query_str}"
-
     try:
-        req = urllib.request.Request(api_url)
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            songs = data.get("subsonic-response", {}).get("searchResult3", {}).get("song", [])
-            if not songs:
-                # Fallback to search2 if searchResult3 empty
-                songs = data.get("subsonic-response", {}).get("searchResult2", {}).get("song", [])
+        data = subsonic_request(
+            base_url=navi_url,
+            user=navi_user,
+            password=navi_pass,
+            endpoint="search3.view",
+            extra_params={
+                "query": clean_search_query,
+                "songCount": 10,
+                "albumCount": 0,
+                "artistCount": 0
+            },
+            timeout=5
+        )
+        songs = data.get("subsonic-response", {}).get("searchResult3", {}).get("song", [])
+        if not songs:
+            songs = data.get("subsonic-response", {}).get("searchResult2", {}).get("song", [])
 
-            c_target_title = clean_string(title)
-            c_target_artist = clean_string(artist)
+        for song in songs:
+            c_song_title = clean_string(song.get("title", ""))
+            c_song_artist = clean_string(song.get("artist", ""))
 
-            for song in songs:
-                c_song_title = clean_string(song.get("title", ""))
-                c_song_artist = clean_string(song.get("artist", ""))
+            if not c_song_title:
+                continue
 
-                # Check if titles match closely
+            # Title matching:
+            # For short titles (<= 4 chars, e.g. "One", "War", "Run"), require exact match
+            if len(c_target_title) <= 4 or len(c_song_title) <= 4:
+                title_match = (c_target_title == c_song_title)
+            else:
                 title_match = (
                     c_target_title == c_song_title
-                    or c_target_title in c_song_title
-                    or c_song_title in c_target_title
-                )
-                
-                # Check if artists match closely (or if one is contained in the other)
-                artist_match = (
-                    not c_target_artist
-                    or not c_song_artist
-                    or c_target_artist == c_song_artist
-                    or c_target_artist in c_song_artist
-                    or c_song_artist in c_target_artist
+                    or c_target_title.startswith(c_song_title + " ")
+                    or c_song_title.startswith(c_target_title + " ")
                 )
 
-                if title_match and artist_match:
-                    return song
+            # Artist matching:
+            artist_match = (
+                not c_target_artist
+                or not c_song_artist
+                or c_target_artist == c_song_artist
+                or c_target_artist in c_song_artist
+                or c_song_artist in c_target_artist
+            )
+
+            if title_match and artist_match:
+                return song
 
     except Exception:
         pass
@@ -157,6 +206,8 @@ def filter_existing_songs(
             if should_skip:
                 fmt_name = suffix.upper() if suffix else "ISTNIEJĄCY"
                 log(f"[Deduplikacja] Znaleziono w Navidrome ({fmt_name}): {artist} - {title} -> POMIJAM")
+                # Store matched song ID in metadata in case needed for playlist reconstruction
+                song["_navidrome_id"] = match.get("id")
                 skipped.append(song)
                 continue
 
