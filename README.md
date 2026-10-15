@@ -64,19 +64,35 @@ docker compose up --build -d
 ```
 4. Open your browser and navigate to: `http://<YOUR-SERVER-IP>:8000`
 
-## ⚙️ Navidrome & Soulseek Integration
+## ⚙️ Navidrome & Soulseek Integration (File-Based Accounts)
 
-1. Open settings (the gear icon in the top right corner).
-2. **Navidrome Integration**:
-   - Enter your Navidrome `URL` (e.g., `http://your-server-ip:4533`), `Username`, and `Password`.
-   - Click **"Testuj połączenie"** to verify connectivity.
-   - (Optional) Toggle "Wymuś skanowanie i usuń .m3u".
-3. **Soulseek (slskd) Integration**:
-   - Enter your slskd `URL` (e.g., `http://your-server-ip:5030`), `Username` (default: `slskd`), and `Password` (default: `slskd`).
-   - Click **"Testuj połączenie"** to verify login and transfers access.
-   - Click **"Uporządkuj pliki"** under the link tile to import and organize downloaded FLAC/MP3 files into your library.
-4. **Client Configuration Persistence**:
-   - URLs, logins, themes, and wallpapers are automatically saved in your browser (`localStorage`). For security, passwords are kept only in the active session memory and are never written to disk or storage.
+W wersji 2.1 konta są definiowane w plikach konfiguracyjnych na serwerze i sczytywane dynamicznie w locie (bez zapisywania haseł w przeglądarce).
+
+Pliki należy umieścić w zamontowanym katalogu `~/spotdl/` (który kontener widzi jako `/spotdl_config`):
+
+1. **`~/spotdl/navidrome_accounts.txt`**:
+   ```text
+   Server: "http://192.168.1.102:4533"
+   user: "mateusz"
+   password: "TwojeHaslo"
+   user: "natka"
+   password: "DrugieHaslo"
+   ```
+   W ustawieniach Downloadeusza konta pojawią się w rozwijanej liście (`<select>`). Wystarczy wybrać konto, którego chcesz używać. Kliknięcie ikony odświeżenia natychmiast zaktualizuje listę kont bez restartowania kontenera.
+
+2. **`~/spotdl/slskd_accounts.txt`**:
+   ```text
+   Server: "http://192.168.1.102:5030"
+   user: "twoj_uzytkownik"
+   password: "twoje_haslo"
+   ```
+   Downloadeusz automatycznie wykryje serwer Soulseek i użytkownika, umożliwiając testowanie połączenia oraz uruchamianie automatycznego porządkowania pobranych plików („Uporządkuj pliki”).
+
+3. **Pobieranie samych metadanych ze Spotify & Generator FFmpeg**:
+   - Wklej link ze Spotify (utwór lub album) w zakładce Spotify.
+   - Kliknij **„Pobierz same metadane”**.
+   - Bento box wyświetli metadane, okładkę i wygenerowaną bezpieczną komendę FFmpeg z placeholderem `"PLIK_PIOSENKI.mp3"`.
+   - Przycisk kopiowania skopiuje komendę do schowka i wklei ją do okna terminala.
 
 ## 🛠️ Tech Stack
 - **Backend:** Python (FastAPI, asyncio, Uvicorn, Mutagen, Subsonic & slskd API clients)
