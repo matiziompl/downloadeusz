@@ -1,7 +1,13 @@
 import os
+import json
 import subprocess
 import asyncio
 import uuid
+import urllib.parse
+import time
+import hashlib
+import secrets
+import glob
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -401,14 +407,6 @@ def run_download_task(task_id: str, request: DownloadRequest):
                 f.write("\n[Navidrome] Rozpoczynanie integracji tworzenia natywnej playlisty...\n")
                 f.flush()
                 try:
-                    import urllib.request
-                    import urllib.parse
-                    import time
-                    import hashlib
-                    import secrets
-                    import glob
-                    import json
-                    
                     def call_navi(endpoint, extra_params=None):
                         return navidrome_dedup.subsonic_request(
                             base_url=request.navi_url,
@@ -587,7 +585,6 @@ async def get_errors():
                 return {"errors": []}
             
             # Try parsing as JSON (spotdl v4 uses JSON for --save-errors)
-            import json
             try:
                 data = json.loads(content)
                 if isinstance(data, list):

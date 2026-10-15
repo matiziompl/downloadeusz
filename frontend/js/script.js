@@ -11,13 +11,13 @@ function appData() {
         logs: [],
         
         // Services & Integrations
-        // Services & Integrations (URLs, logins, and preferences persisted in localStorage, passwords in memory only)
+        // Services & Integrations (persisted in localStorage)
         slskdUrl: localStorage.getItem('slskdUrl') || '',
         slskdUser: localStorage.getItem('slskdUser') || '',
-        slskdPass: '',
+        slskdPass: localStorage.getItem('slskdPass') || '',
         naviUrl: localStorage.getItem('naviUrl') || '',
         naviUser: localStorage.getItem('naviUser') || '',
-        naviPass: '',
+        naviPass: localStorage.getItem('naviPass') || '',
         naviSync: localStorage.getItem('naviSync') === 'true',
         statusDisplayMode: (localStorage.getItem('statusDisplayMode') && localStorage.getItem('statusDisplayMode') !== 'errors_only') ? localStorage.getItem('statusDisplayMode') : 'not_logged_or_error',
         naviStatus: { tested: false, ok: false, msg: '' },
@@ -83,11 +83,6 @@ function appData() {
         logMode: 'advanced', // changed default to advanced since user wants terminal
 
         initApp() {
-            // Security: guarantee passwords are never persisted in localStorage
-            localStorage.removeItem('naviPass');
-            localStorage.removeItem('slskdPass');
-            localStorage.removeItem('rememberCredentials');
-
             this.loadSettings();
             this.fetchWallpapers();
             this.fetchErrors();
@@ -137,6 +132,7 @@ function appData() {
                 this.saveSettings();
             });
             this.$watch('naviPass', value => {
+                localStorage.setItem('naviPass', value || '');
                 this.naviStatus = { tested: false, ok: false, msg: '' };
                 this.saveSettings();
             });
@@ -157,6 +153,7 @@ function appData() {
                 this.saveSettings();
             });
             this.$watch('slskdPass', value => {
+                localStorage.setItem('slskdPass', value || '');
                 this.slskdStatus = { tested: false, ok: false, msg: '' };
                 this.saveSettings();
             });
@@ -186,17 +183,14 @@ function appData() {
             localStorage.setItem('downloadeusz_settings', JSON.stringify(settings));
             localStorage.setItem('statusDisplayMode', this.statusDisplayMode);
 
-            // Persist service addresses, logins, and sync settings
+            // Persist service addresses, logins, passwords, and sync settings
             localStorage.setItem('slskdUrl', this.slskdUrl || '');
             localStorage.setItem('slskdUser', this.slskdUser || '');
+            localStorage.setItem('slskdPass', this.slskdPass || '');
             localStorage.setItem('naviUrl', this.naviUrl || '');
             localStorage.setItem('naviUser', this.naviUser || '');
+            localStorage.setItem('naviPass', this.naviPass || '');
             localStorage.setItem('naviSync', this.naviSync ? 'true' : 'false');
-
-            // Security: passwords are kept strictly in session memory and never in localStorage
-            localStorage.removeItem('slskdPass');
-            localStorage.removeItem('naviPass');
-            localStorage.removeItem('rememberCredentials');
         },
         
         loadSettings() {
@@ -222,8 +216,10 @@ function appData() {
                             ...this.flags,
                             ...settings.flags,
                             check_navidrome: settings.flags.check_navidrome ?? false,
-                            navidrome_skip_mode: settings.flags.navidrome_skip_mode || 'flac_only'
+                            navidrome_skip_mode: (settings.flags.navidrome_skip_mode === 'all') ? 'all' : 'flac_only'
                         };
+                    } else {
+                        this.flags.navidrome_skip_mode = 'flac_only';
                     }
                 } catch (e) {}
             }
@@ -233,14 +229,13 @@ function appData() {
             }
             this.slskdUrl = localStorage.getItem('slskdUrl') || this.slskdUrl || '';
             this.slskdUser = localStorage.getItem('slskdUser') || this.slskdUser || '';
+            this.slskdPass = localStorage.getItem('slskdPass') || this.slskdPass || '';
             this.naviUrl = localStorage.getItem('naviUrl') || this.naviUrl || '';
             this.naviUser = localStorage.getItem('naviUser') || this.naviUser || '';
+            this.naviPass = localStorage.getItem('naviPass') || this.naviPass || '';
             if (localStorage.getItem('naviSync') !== null) {
                 this.naviSync = localStorage.getItem('naviSync') === 'true';
             }
-            // Passwords are kept in memory only
-            this.slskdPass = '';
-            this.naviPass = '';
         },
         
         async fetchWallpapers() {

@@ -1,3 +1,4 @@
+import os
 import json
 from unittest.mock import patch, MagicMock
 import pytest
@@ -220,12 +221,79 @@ def test_run_download_task_ytdl_dedup_skips_flac(tmp_path):
         "suffix": "flac"
     }
 
-    with patch("backend.navidrome_dedup.extract_ytdl_metadata", return_value=mock_entries), \
-         patch("backend.navidrome_dedup.search_navidrome_song", return_value=mock_search_resp), \
-         patch("subprocess.Popen") as mock_popen:
+    try:
+        with patch("backend.navidrome_dedup.extract_ytdl_metadata", return_value=mock_entries), \
+             patch("backend.navidrome_dedup.search_navidrome_song", return_value=mock_search_resp), \
+             patch("subprocess.Popen") as mock_popen:
 
-        run_download_task("test-task-1", req)
+            run_download_task("test-task-1", req)
 
-        # Since it's already in FLAC, yt-dlp download must be skipped (Popen not called)
-        assert mock_popen.call_count == 0
+            # Since it's already in FLAC, yt-dlp download must be skipped (Popen not called)
+            assert mock_popen.call_count == 0
+    finally:
+        from backend.main import LOGS_DIR
+        lf = os.path.join(LOGS_DIR, "test-task-1.log")
+        if os.path.exists(lf):
+            os.remove(lf)
+
+
+def test_run_download_task_spotdl_dedup_uses_json_without_unbound_error(tmp_path):
+    from backend.main import run_download_task, DownloadRequest, LOGS_DIR
+
+    req = DownloadRequest(
+        tool="spotdl",
+        url="https://open.spotify.com/album/2UJcKiJxNryhL050F5Z1Fk",
+        flags={
+            "check_navidrome": True,
+            "navidrome_skip_mode": "flac_only",
+        },
+        navi_url="http://navidrome:4533",
+        navi_user="admin",
+        navi_pass="secret"
+    )
+
+    fake_songs = [
+        {"name": "Smells Like Teen Spirit", "artists": ["Nirvana"], "url": "https://spotify/track1"},
+        {"name": "In Bloom", "artists": ["Nirvana"], "url": "https://spotify/track2"}
+    ]
+
+    def mock_subp_run(cmd, *args, **kwargs):
+        # When spotdl save is executed, write JSON to --save-file
+        if "save" in cmd:
+            save_file_idx = cmd.index("--save-file") + 1
+            save_file_path = cmd[save_file_idx]
+            with open(save_file_path, "w", encoding="utf-8") as sf:
+                json.dump(fake_songs, sf)
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        return mock_res
+
+    # Both tracks skipped because existing in Navidrome
+    mock_filtered = ([], [{"name": "Smells Like Teen Spirit", "_navidrome_id": "n1"}, {"name": "In Bloom", "_navidrome_id": "n2"}])
+
+    task_id = "test-spotdl-dedup-task"
+    try:
+        with patch("backend.main.SPOTDL_CONFIG_DIR", str(tmp_path)), \
+             patch("subprocess.run", side_effect=mock_subp_run), \
+             patch("backend.navidrome_dedup.filter_existing_songs", return_value=mock_filtered), \
+             patch("subprocess.Popen") as mock_popen:
+
+            run_download_task(task_id, req)
+
+            # Read log file to verify no UnboundLocalError occurred
+            log_file = os.path.join(LOGS_DIR, f"{task_id}.log")
+            assert os.path.exists(log_file)
+            with open(log_file, "r", encoding="utf-8") as lf:
+                log_content = lf.read()
+
+            assert "cannot access local variable 'json'" not in log_content
+            assert "Wszystkie utwory (2) znajdują się już w Twojej bibliotece Navidrome" in log_content
+            # SpotDL download process should not have been spawned since all kept=0
+            assert mock_popen.call_count == 0
+    finally:
+        log_file = os.path.join(LOGS_DIR, f"{task_id}.log")
+        if os.path.exists(log_file):
+            os.remove(log_file)
+
+
 

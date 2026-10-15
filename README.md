@@ -17,7 +17,7 @@ The standout features of Downloadeusz are its **direct integration with Navidrom
 - 🔄 **Soulseek (slskd) Auto-Organizer**: Automatically pulls completed downloads from your slskd daemon using your account login (`slskd`/`slskd`), parses audio tags (FLAC, MP3, M4A) via `mutagen`, and moves them into `{artist}/{year} - {album}/{track} {title}.{ext}`, then notifies Navidrome!
 - 🔍 **Smart Navidrome Deduplication**: Automatically queries Navidrome before downloading tracks from Spotify, YouTube, or SoundCloud. Skips songs already in your library if a higher quality version (e.g. FLAC / Lossless) or existing file is present.
 - 📡 **Live Terminal (SSE) & Status Bar**: Monitor downloads and Soulseek organization in real-time. Instant connection test buttons and health status indicators for Navidrome and slskd.
-- 💾 **Client Configuration Persistence**: Service URLs, logins, wallpapers, and all preferences are safely stored in your browser's `localStorage` (passwords are kept in session memory only for security) — restarting or updating the Docker container won't wipe your configuration.
+- 💾 **Client Configuration Persistence**: Service URLs, logins, passwords, wallpapers, and all preferences are safely stored in your browser's `localStorage` — restarting or updating the Docker container won't wipe your configuration.
 - 🎶 **Native Navidrome Playlists**: Downloadeusz translates temporary `.m3u` files into internal Navidrome IDs and creates fully editable native playlists.
 - ⚠️ **Smart Error Handling**: A slide-out panel alerts you if a specific song couldn't be found, with direct links to the original track.
 
