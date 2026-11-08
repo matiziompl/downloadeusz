@@ -1,39 +1,39 @@
-# Downloadeusz (v2.12)
+# Downloadeusz (v2.13)
 
-**A modern, self-hosted Web UI for SpotDL, yt-dlp, and Soulseek (slskd) with deep Navidrome integration**
+**Interfejs przeglądarkowy dla SpotDL, yt-dlp i Soulseeka (slskd), uruchamiany na własnym serwerze i zintegrowany z Navidrome**
 
 ---
 
-**Downloadeusz** is a lightweight, Dockerized web application that allows you to easily download music (individual tracks, entire albums, and massive playlists from Spotify and YouTube) directly to your home server (e.g., NAS / Raspberry Pi).
+**Downloadeusz** to aplikacja przeglądarkowa uruchamiana w Dockerze. Pozwala pobierać pojedyncze utwory, całe albumy i duże playlisty na własny serwer, np. NAS lub Raspberry Pi. Odczytuje listy utworów ze Spotify, a plików audio szuka w obsługiwanych źródłach; obsługuje też bezpośrednie linki YouTube i SoundCloud.
 
-The standout features of Downloadeusz are its **direct integration with Navidrome via the Subsonic API**, **Soulseek (slskd) library organization**, and **beets imports**. The app bypasses the common read-only `.m3u` playlist limitation by translating downloaded files into internal Navidrome IDs and generating native playlists. It can check Navidrome before downloading to avoid existing tracks, and import new music through beets for album matching, corrected tags, artwork, and consistent folders. Service credentials are read from server-side account files; browser preferences remain in local storage.
+Główne funkcje Downloadeusza to **integracja z Navidrome przez API Subsonic**, **porządkowanie pobrań Soulseeka (slskd)** i **import przez beets**. Aplikacja tworzy edytowalne playlisty Navidrome na podstawie identyfikatorów utworów w bibliotece, zamiast pozostawać przy ograniczeniach playlist `.m3u` tylko do odczytu. Przed pobraniem może sprawdzić, czy nagranie jest już w Navidrome. Beets odpowiada za dopasowanie albumu, poprawianie tagów, okładki i spójne foldery. Dane logowania są odczytywane z plików na serwerze, a preferencje przeglądarki pozostają w pamięci lokalnej.
 
-## ✨ Key Features
+## ✨ Najważniejsze funkcje
 
 - **Zatrzymywanie zadań**: „Zatrzymaj wszystko” obok odświeżania kolejki i kosz przy aktywnym zadaniu anulują pracę bez usuwania plików. Anulowanie jest trwałe; ręczne „Ponów” zachowuje ukończone utwory. Zatrzymanie całej kolejki wstrzymuje automatyczny import i webhooki do ręcznego dodania lub ponowienia zadania. Kolejka pokazuje szczegóły błędu downloadera i nie ponawia jednoznacznie niedostępnych filmów.
 - **Wyszukiwanie stopniowe i bieżący postęp**: Soulseek ponawia wyszukiwanie coraz ogólniejszymi zapytaniami, usuwając dodatki typu „Official Audio”, z zachowaniem kontroli wykonawcy, tytułu, wersji i długości. Kafelek między formularzem a kolejką pokazuje rzeczywiście wykonywane zadanie i zapytanie. Gdy album pozostaje nieznany po rozpoznawaniu, nowe importy używają nazwy utworu jako niepotwierdzonego albumu zastępczego.
 - **Dokumentacja w aplikacji**: przycisk książki w lewym górnym rogu otwiera README, opis ostatniej wersji i instrukcję wszystkich funkcji. Widżet błędów znajduje się pod nim. Opisy wersji są przechowywane w `docs/vN.M.md`, a instrukcja w `docs/INSTRUCTION.md`.
-- 🎨 **Modern & Responsive (Bento UI)**: A Glassmorphism interface for mobile devices and desktops, with custom wallpapers, background presets, and accent colors.
-- 🎵 **SpotDL & YT-DLP Under the Hood**: Download from Spotify, YouTube, and SoundCloud with smart link auto-detection and full metadata preservation.
-- 🔄 **Soulseek (slskd) Organizer**: Selects completed downloads from slskd. With beets enabled it matches albums, copies and tags music, and retains originals. The legacy tag-based organizer remains available when beets is disabled.
-- 🔍 **Smart Navidrome Deduplication**: Automatically queries Navidrome before downloading tracks from Spotify, YouTube, or SoundCloud. Skips songs already in your library if a higher quality version (e.g. FLAC / Lossless) or existing file is present.
-- 📡 **Live Terminal (SSE) & Status Bar**: Monitor downloads and Soulseek organization in real-time. Instant connection test buttons and health status indicators for Navidrome and slskd.
-- 💾 **Configuration Persistence**: Service credentials live in mounted account files; appearance and download preferences are stored in browser `localStorage`.
-- 🎶 **Native Navidrome Playlists**: Downloadeusz translates temporary `.m3u` files into internal Navidrome IDs and creates fully editable native playlists.
-- ⚠️ **Smart Error Handling**: A slide-out panel alerts you if a specific song couldn't be found, with direct links to the original track.
+- 🎨 **Interfejs na telefon i komputer**: układ kafelkowy z półprzezroczystymi panelami, własnymi tapetami, gotowymi tłami i wyborem koloru akcentu.
+- 🎵 **Pobieranie przez SpotDL i yt-dlp**: obsługa list ze Spotify oraz źródeł YouTube i SoundCloud, automatyczne rozpoznawanie linków i obsługa metadanych.
+- 🔄 **Porządkowanie Soulseeka (slskd)**: wybór ukończonych pobrań. Przy włączonym beets aplikacja dopasowuje albumy, kopiuje muzykę, zapisuje tagi i zachowuje oryginały. Po wyłączeniu beets dostępny jest starszy mechanizm oparty na tagach.
+- 🔍 **Sprawdzanie duplikatów w Navidrome**: weryfikacja biblioteki przed pobraniem pozwala pominąć posiadane utwory, np. gdy istnieje już kopia bezstratna lub inny akceptowany plik.
+- 📡 **Terminal na żywo i stan usług**: logi pobierania i porządkowania przez SSE, przyciski testowania połączeń oraz wskaźniki stanu Navidrome i slskd.
+- 💾 **Zapamiętywanie ustawień**: dane logowania pozostają w montowanych plikach kont, a wygląd i preferencje pobierania są przechowywane w `localStorage` przeglądarki.
+- 🎶 **Natywne playlisty Navidrome**: powiązanie utworów z identyfikatorami biblioteki umożliwia tworzenie playlist edytowalnych w Navidrome.
+- ⚠️ **Obsługa błędów**: wysuwany panel pokazuje nieodnalezione utwory i odsyłacze do źródeł, jeśli są dostępne.
 
-## 🚀 Installation & Setup (Docker)
+## 🚀 Instalacja i konfiguracja w Dockerze
 
-The recommended way to deploy Downloadeusz is using Docker Compose (`docker compose`).
+Zalecany sposób uruchamiania Downloadeusza to Docker Compose (`docker compose`).
 
-1. Clone this repository to your server.
-2. Create or edit your `docker-compose.yml` file:
+1. Sklonuj repozytorium na swój serwer.
+2. Utwórz lub zaktualizuj plik `docker-compose.yml`:
 
 ```yaml
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.12
+    image: downloadeusz:2.13
     container_name: downloadeusz
     restart: unless-stopped
     ports:
@@ -81,21 +81,23 @@ services:
       - SLSKD_WEBHOOK_SECRET=${SLSKD_WEBHOOK_SECRET:-}
 ```
 
-> **Important:** Adjust the paths on the left side of the colon to match your server's directory structure.
-> - `/downloads` is the destination for downloaded music (mount your Navidrome music folder here).
-> - `/slskd_downloads` is where your slskd (Soulseek) downloads complete.
-> - `/spotdl_config` stores cookies like `youtube_cookies.txt`, the durable queue and beets state. Account files are mounted separately from the directory containing Compose.
-> - `/app/frontend/assets/wallpapers` allows you to upload custom wallpapers.
+> **Ważne:** dopasuj ścieżki po stronie hosta do folderów na swoim serwerze. W skróconym zapisie montowania jest to część po lewej stronie dwukropka; w pełnym zapisie — pole `source`.
+>
+> - `/downloads` to docelowa biblioteka pobieranej muzyki; zamontuj tu folder używany przez Navidrome.
+> - `/slskd_downloads` wskazuje ukończone pobrania slskd (Soulseek).
+> - `/spotdl_config` przechowuje ciasteczka, np. `youtube_cookies.txt`, trwałą kolejkę i stan beets. Pliki kont są montowane osobno z katalogu zawierającego Compose.
+> - `/app/frontend/assets/wallpapers` to miejsce na własne tapety.
 
 Ten przykład odpowiada dołączonemu `docker-compose.yml`. Domyślnie włącza beets oraz współpracę z osobnym Normalizeuszem. Jeśli nie uruchamiasz Normalizeusza, ustaw `NORMALIZATION_ENABLED=false` w pliku `.env` obok Compose; w przeciwnym razie zadania będą czekać na potwierdzenie normalizacji. Konfigurację wspólnego katalogu opisuje sekcja „Potwierdzanie ReplayGain przez Normalizeusza”.
 
 Przed uruchomieniem umieść oba pliki `navidrome_accounts.txt` i `slskd_accounts.txt` obok `docker-compose.yml`; plik dla nieużywanej usługi może pozostać pusty. Są montowane tylko do odczytu. Brak pliku zatrzymuje uruchomienie zamiast tworzyć katalog o jego nazwie. Format opisano w sekcji o kontach poniżej.
 
-3. Start the container:
+3. Uruchom kontener:
+
 ```bash
 docker compose up --build -d
 ```
-4. Open your browser and navigate to: `http://<YOUR-SERVER-IP>:9000`
+4. Otwórz w przeglądarce `http://<ADRES-SERWERA>:9000`.
 
 ## Beets: automatyczne porządkowanie nowych pobrań
 
@@ -187,7 +189,7 @@ Startowy skan Normalizeusza nie wykonuje masowego uzupełniania albumów. Nowe/z
 
 Historia panelu i raporty są ograniczone do najnowszych wpisów i próbek; liczniki obejmują cały przebieg. Długi ręczny skan może opóźnić inne zlecenia normalizacji w osobnym kontenerze. Downloadeusz nadal obsługuje kolejkę pobierania, a normalizacja oczekuje na swój wynik.
 
-## ⚙️ Navidrome & Soulseek Integration (File-Based Accounts)
+## ⚙️ Integracja z Navidrome i Soulseekiem — konta w plikach
 
 W wersji 2.1 konta są definiowane w plikach konfiguracyjnych na serwerze i sczytywane dynamicznie w locie (bez zapisywania haseł w przeglądarce).
 
@@ -217,14 +219,15 @@ Zmiany zapisane w istniejącym pliku są odczytywane przy odświeżeniu kont. Je
 
 Poza Dockerem domyślny katalog kont to główny katalog projektu, wyznaczany względem pliku modułu, a nie bieżącego katalogu terminala. Można go zmienić zmienną środowiskową `ACCOUNTS_DIR`. `SPOTDL_CONFIG_DIR` nie określa już lokalizacji kont; ciasteczka, kolejka i stan beets pozostają w swoim dotychczasowym katalogu. Stare pliki kont w `~/spotdl/` nie są automatycznie odczytywane. Oba prywatne pliki są wykluczone przez `.gitignore` i `.dockerignore`; nie są kopiowane do obrazu ani nadpisywane przy aktualizacji aplikacji.
 
-3. **Pobieranie samych metadanych ze Spotify & Generator FFmpeg**:
+3. **Pobieranie samych metadanych ze Spotify i generator poleceń FFmpeg**:
    - Wklej link ze Spotify (utwór lub album) w zakładce Spotify.
    - Kliknij **„Pobierz same metadane”**.
    - Podgląd wyświetli metadane, okładkę i wygenerowaną komendę FFmpeg. Podmień wartość `FILE=...` na ścieżkę właściwego pliku przed samodzielnym uruchomieniem w terminalu.
    - Przycisk kopiowania skopiuje komendę do schowka i pokaże ją w konsoli aplikacji; nie uruchamia jej na serwerze.
 
-## 🛠️ Tech Stack
-- **Backend:** Python (FastAPI, asyncio, Uvicorn, Mutagen, Subsonic & slskd API clients)
-- **Frontend:** HTML5, Alpine.js, Tailwind CSS (via CDN), Phosphor Icons
-- **Engines:** SpotDL, yt-dlp, Deno (for youtube-music modules)
+## 🛠️ Wykorzystane technologie
+
+- **Część serwerowa:** Python, FastAPI, asyncio, Uvicorn, Mutagen oraz obsługa API Subsonic i slskd.
+- **Interfejs przeglądarkowy:** HTML5, Alpine.js, Tailwind CSS przez CDN oraz ikony Phosphor.
+- **Narzędzia pobierania:** SpotDL, yt-dlp i Deno do obsługi JavaScript przy odczytywaniu źródeł YouTube.
 
