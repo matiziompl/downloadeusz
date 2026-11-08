@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Downloadeusz - Twój Serwerowy Pobieracz</title>
+    <title>Downloadeusz</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -23,6 +23,45 @@
     <!-- Dynamic Background -->
     <div class="fixed inset-0 -z-20 bg-cover bg-center transition-all duration-700" :style="getBackgroundStyle() + `; filter: blur(${blurAmount}px); transform: scale(1.1);`"></div>
     <div class="fixed inset-0 -z-10 bg-neutral-900/10"></div> <!-- Slight overlay for readability -->
+
+    <button type="button" x-ref="documentationTrigger" @click="openDocumentation()"
+            class="documentation-trigger fixed top-6 left-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10"
+            aria-label="Otwórz dokumentację Downloadeusza" title="README, ostatnia wersja i instrukcja"
+            aria-haspopup="dialog" aria-controls="documentation-dialog" :aria-expanded="documentationOpen">
+        <i class="ph ph-book-open text-2xl" aria-hidden="true"></i>
+    </button>
+
+    <dialog id="documentation-dialog" x-ref="documentationDialog" class="documentation-dialog"
+            aria-labelledby="documentation-heading" @close="documentationClosed()"
+            @click="if ($event.target === $el) closeDocumentation()"
+            :style="`--documentation-accent: ${getEffectiveColor()}`">
+        <div class="documentation-shell">
+            <header class="documentation-header">
+                <h2 id="documentation-heading">Downloadeusz <span x-show="appVersion" x-text="`v${appVersion}`"></span></h2>
+                <button type="button" @click="closeDocumentation()" class="documentation-close" aria-label="Zamknij dokumentację">
+                    <i class="ph ph-x text-xl" aria-hidden="true"></i>
+                </button>
+            </header>
+            <div class="documentation-tabs" role="tablist" aria-label="Dokumentacja" @keydown="documentationTabKeydown($event)">
+                <template x-for="tab in documentationTabs" :key="tab.id">
+                    <button type="button" role="tab" :id="`documentation-tab-${tab.id}`"
+                            :aria-selected="documentationSection === tab.id" aria-controls="documentation-panel"
+                            :tabindex="documentationSection === tab.id ? 0 : -1"
+                            @click="loadDocumentation(tab.id)" x-text="tab.label"></button>
+                </template>
+            </div>
+            <section role="tabpanel" id="documentation-panel"
+                     :aria-labelledby="`documentation-tab-${documentationSection}`" :aria-busy="documentationLoading"
+                     class="documentation-panel custom-scrollbar" tabindex="0" x-ref="documentationPanel">
+                <p x-show="documentationLoading" role="status" class="documentation-message">Wczytywanie dokumentacji…</p>
+                <div x-show="documentationError" role="alert" class="documentation-message" style="display: none;">
+                    <p x-text="documentationError"></p>
+                    <button type="button" @click="loadDocumentation(documentationSection)">Spróbuj ponownie</button>
+                </div>
+                <article class="documentation-content" x-show="!documentationLoading && !documentationError" x-html="documentationHtml"></article>
+            </section>
+        </div>
+    </dialog>
 
     <!-- Settings Gear Icon -->
     <button @click="toggleSettings()" class="fixed top-6 right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md transition-all shadow-lg border border-white/10 group">
@@ -257,14 +296,14 @@
 
              <!-- Version -->
              <div class="mt-8 text-center">
-                 <span class="text-xs font-medium text-white/60 tracking-wider">v2.1</span>
+                 <span class="text-xs font-medium text-white/60 tracking-wider" x-text="appVersion ? `v${appVersion}` : 'Wersja niedostępna'"></span>
              </div>
 
          </div>
     </div>
     
     <!-- Errors Widget Icon (All devices) -->
-    <button x-show="errorsList.length > 0" @click="errorsOpen = true" class="fixed top-6 left-6 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md transition-all shadow-lg border border-red-500/30 group" style="display: none;">
+    <button x-show="errorsList.length > 0" @click="errorsOpen = true" aria-label="Pokaż błędy" class="fixed top-24 left-6 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md transition-all shadow-lg border border-red-500/30 group" style="display: none;">
         <i class="ph ph-warning-circle text-2xl text-red-400 group-hover:scale-110 transition-transform"></i>
         <!-- Ping indicator -->
         <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
@@ -322,24 +361,31 @@
                 </div>
 
                 <!-- Tool Selector -->
-                <div class="flex bg-black/50 p-1.5 rounded-2xl mb-8 border border-white/5 backdrop-blur-md">
-                    <button @click="selectedTool = 'spotdl'" 
-                            class="flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-300 relative z-10"
+                <div class="flex flex-wrap bg-black/50 p-1.5 rounded-2xl mb-8 border border-white/5 backdrop-blur-md" role="group" aria-label="Źródło muzyki">
+                    <button type="button" @click="selectedTool = 'spotdl'" :aria-pressed="selectedTool === 'spotdl'"
+                            class="flex-1 py-3 px-3 rounded-xl text-sm font-medium transition-all duration-300 relative z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                             :class="selectedTool === 'spotdl' ? 'shadow-lg' : 'text-white/50 hover:text-white/80'"
                             :style="selectedTool === 'spotdl' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
                         Spotify (spotdl)
                     </button>
-                    <button @click="selectedTool = 'ytdl'" 
-                            class="flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-300 relative z-10"
+                    <button type="button" @click="selectedTool = 'ytdl'" :aria-pressed="selectedTool === 'ytdl'"
+                            class="flex-1 py-3 px-3 rounded-xl text-sm font-medium transition-all duration-300 relative z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                             :class="selectedTool === 'ytdl' ? 'shadow-lg' : 'text-white/50 hover:text-white/80'"
                             :style="selectedTool === 'ytdl' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
                         YT i SoundCloud (yt-dlp)
+                    </button>
+                    <button type="button" @click="selectedTool = 'soulseek'" :aria-pressed="selectedTool === 'soulseek'"
+                            class="flex-1 py-3 px-3 rounded-xl text-sm font-medium transition-all duration-300 relative z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                            :class="selectedTool === 'soulseek' ? 'shadow-lg' : 'text-white/75 hover:text-white'"
+                            :style="selectedTool === 'soulseek' ? `background-color: ${getEffectiveColor()}; color: ${getTextColor()}` : ''">
+                        Soulseek
                     </button>
                 </div>
 
                 <!-- Input Area -->
                 <div class="mb-6">
-                    <input type="text" x-model="url" placeholder="Wklej link do Spotify, YouTube lub SoundCloud..." 
+                    <input type="text" x-model="url" aria-label="Link do utworu, albumu lub playlisty"
+                           :placeholder="selectedTool === 'soulseek' ? 'Wklej link do Spotify lub YouTube...' : 'Wklej link do Spotify, YouTube lub SoundCloud...'"
                            class="w-full bg-white/95 text-black px-6 py-5 rounded-2xl text-lg outline-none focus:ring-4 transition-all shadow-inner font-medium placeholder-neutral-500"
                            :style="`--tw-ring-color: ${getEffectiveColor()}80`">
                 </div>
@@ -406,7 +452,7 @@
                                     <span>Testuj</span>
                                 </button>
                                 <button @click="organizeSlskd()" 
-                                        :disabled="organizingSlskd || !slskdAccount.configured" 
+                                        :disabled="organizingSlskd || importingBeets || !slskdAccount.configured"
                                         title="Uporządkuj pliki pobrane z Soulseek"
                                         class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i class="ph ph-spinner animate-spin text-sm" x-show="organizingSlskd" style="display: none;"></i>
@@ -418,6 +464,152 @@
 
                     </div>
                 </div>
+
+                <section aria-labelledby="beets-heading" class="border-t border-white/10 pt-4 mb-6">
+                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h2 id="beets-heading" class="text-sm font-semibold text-white/95">Porządkowanie muzyki · beets</h2>
+                            <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="beetsStatusText"></p>
+                            <p x-show="beetsScheduleText" class="mt-1 text-xs text-white/75" x-text="beetsScheduleText" style="display: none;"></p>
+                        </div>
+                        <button type="button" @click="fetchBeetsStatus()" :disabled="fetchingBeets"
+                                class="self-start px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <i class="ph text-sm motion-reduce:animate-none" :class="fetchingBeets ? 'ph-spinner animate-spin' : 'ph-arrow-clockwise'" aria-hidden="true"></i>
+                            <span>Odśwież stan</span>
+                        </button>
+                    </div>
+                    <p x-show="beetsStatus?.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Pliki z wystarczającymi tagami trafiają do biblioteki. Rozpoznawanie uzupełnia ich dane i okładki. Oryginały pozostają w folderze pobrań.</p>
+                    <p x-show="beetsStatus && !beetsStatus.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Włącz porządkowanie na serwerze, aby rozpoznawać albumy i uzupełniać okładki.</p>
+                    <p x-show="beetsStatus?.enabled && beetsStatus?.last_error" class="mt-2 text-xs text-amber-200 break-words"
+                       x-text="beetsStatus?.last_error" style="display: none;"></p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button type="button" @click="importBeets()" :disabled="!canImportBeets"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <i class="ph text-sm motion-reduce:animate-none" :class="importingBeets ? 'ph-spinner animate-spin' : 'ph-folder-notch-open'" aria-hidden="true"></i>
+                            <span x-text="importingBeets ? 'Importowanie…' : 'Importuj nowe pliki'"></span>
+                        </button>
+                        <button type="button" @click="importBeets(true)" :disabled="!canImportBeets"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/85 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            Ponów rozpoznawanie
+                        </button>
+                    </div>
+                    <p x-show="beetsImportError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="beetsImportError" style="display: none;"></p>
+                    <details x-show="beetsStatus?.enabled" class="mt-4 border-t border-white/10 pt-3" style="display: none;">
+                        <summary class="cursor-pointer rounded text-sm font-semibold text-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" x-text="beetsReviewSummary"></summary>
+                        <p x-show="beetsReviewError" role="status" class="mt-3 text-xs text-amber-200" x-text="beetsReviewError" style="display: none;"></p>
+                        <p x-show="!beetsReviewError && !fetchingBeetsReview && beetsReviewItems.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak plików wymagających sprawdzenia.</p>
+                        <ul class="mt-3 max-h-96 overflow-y-auto divide-y divide-white/10" aria-label="Pliki wymagające sprawdzenia">
+                            <template x-for="item in beetsReviewItems.slice(0, beetsReviewLimit)" :key="item.id">
+                                <li class="py-3 first:pt-0 last:pb-0">
+                                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-medium text-white/95 break-words" x-text="beetsReviewFilename(item)"></p>
+                                            <p class="mt-1 text-xs text-white/80" x-text="beetsReviewStatus(item)"></p>
+                                        </div>
+                                        <button type="button" @click="importBeets(false, item.id)" :disabled="!canImportBeets"
+                                                :aria-label="`Sprawdź ponownie: ${beetsReviewFilename(item)}`"
+                                                class="self-start shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/90 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                            <span x-text="retryingBeetsReviewId === item.id ? 'Sprawdzanie…' : 'Sprawdź ponownie'"></span>
+                                        </button>
+                                    </div>
+                                    <p class="mt-2 text-xs leading-relaxed text-white/75 break-words" x-text="item.reason || 'Potrzebne jest ponowne sprawdzenie danych utworu.'"></p>
+                                    <div x-show="Array.isArray(item.candidates) && item.candidates.length > 0" class="mt-2" style="display: none;">
+                                        <p class="text-xs font-medium text-white/85">Propozycje do porównania</p>
+                                        <ul class="mt-1 space-y-1 list-disc pl-4 text-xs leading-relaxed text-white/75">
+                                            <template x-for="(candidate, index) in (Array.isArray(item.candidates) ? item.candidates : []).slice(0, 3)" :key="index">
+                                                <li class="break-words" x-text="beetsCandidateText(candidate)"></li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </template>
+                        </ul>
+                        <button type="button" x-show="beetsReviewItems.length > beetsReviewLimit" @click="beetsReviewLimit += 20"
+                                class="mt-3 rounded px-3 py-2 text-xs font-semibold text-white/85 bg-white/5 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                style="display: none;">Pokaż kolejne 20 plików</button>
+                    </details>
+                </section>
+
+                <section aria-labelledby="normalizer-heading" class="normalizer-panel border-t border-white/10 pt-4 mb-6">
+                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h2 id="normalizer-heading" class="text-sm font-semibold text-white/95">Normalizeusz · głośność i albumy</h2>
+                            <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="normalizerStatusText"></p>
+                            <p x-show="normalizerStatus" class="mt-1 text-xs text-white/75" style="display: none;"
+                               x-text="normalizerStatus?.enabled ? 'ReplayGain po imporcie: włączony' : 'ReplayGain po imporcie: wyłączony'"></p>
+                        </div>
+                        <button type="button" @click="fetchNormalizer()" :disabled="fetchingNormalizer" class="normalizer-action self-start">
+                            <i class="ph ph-arrow-clockwise text-sm" aria-hidden="true"></i>
+                            <span x-text="fetchingNormalizer ? 'Odświeżanie…' : 'Odśwież stan'"></span>
+                        </button>
+                    </div>
+                    <p class="mt-3 text-xs leading-relaxed text-white/75">Osobna usługa zapisuje tagi ReplayGain. Sprawdzenie biblioteki pomija pliki, które już mają te tagi.</p>
+                    <p x-show="normalizerStatus?.message" class="mt-2 text-xs text-white/85" x-text="normalizerStatus?.message" style="display: none;"></p>
+                    <p x-show="normalizerStatus?.available && ['scan_library', 'preview_albums', 'repair_albums'].some(operation => !normalizerStatus.capabilities.includes(operation))" class="mt-2 text-xs text-white/75" style="display: none;">Niektóre akcje wymagają nowszej wersji Normalizeusza. Zaktualizuj jego osobny kontener, aby je udostępnić.</p>
+                    <p x-show="normalizerError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerError" style="display: none;"></p>
+
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button type="button" @click="runNormalizer('scan_library')" :disabled="!canRunNormalizer('scan_library')" class="normalizer-action">
+                            <i class="ph ph-waveform text-sm" aria-hidden="true"></i>
+                            <span x-text="submittingNormalizer === 'scan_library' ? 'Dodawanie zadania…' : 'Sprawdź ReplayGain całej biblioteki'"></span>
+                        </button>
+                    </div>
+                    <p class="mt-4 text-xs leading-relaxed text-white/75">Puste albumy można uzupełnić tytułem utworu. Zmienią się wyłącznie tagi; nazwy i położenie plików pozostaną takie same. Pliki bez tytułu zostaną pominięte.</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button type="button" @click="runNormalizer('preview_albums')" :disabled="!canRunNormalizer('preview_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
+                            <span x-text="submittingNormalizer === 'preview_albums' ? 'Dodawanie zadania…' : 'Sprawdź brakujące albumy'"></span>
+                        </button>
+                        <button type="button" @click="runNormalizer('repair_albums')" :disabled="!canRunNormalizer('repair_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
+                            <span x-text="submittingNormalizer === 'repair_albums' ? 'Dodawanie zadania…' : 'Uzupełnij puste albumy'"></span>
+                        </button>
+                    </div>
+                    <p id="normalizer-album-help" class="mt-2 text-xs leading-relaxed text-white/75">Najpierw sprawdź brakujące albumy bez zapisywania zmian. Uzupełnianie będzie dostępne po zakończeniu sprawdzenia, jeśli znaleziono pliki do poprawy. Przed kolejnym uzupełnianiem sprawdź je ponownie.</p>
+                    <p x-show="normalizerAlbumPreview?.status === 'done'" class="mt-2 text-xs text-white/90 normalizer-counts" style="display: none;" x-text="normalizerAlbumPreview ? `Ostatnie sprawdzenie albumów · ${normalizerProgressText(normalizerAlbumPreview)}` : ''"></p>
+                    <p x-show="selectedNaviAccount" class="mt-2 text-xs text-white/75" style="display: none;">Wybrane konto Navidrome zostanie przeskanowane po zmianach.</p>
+                    <p x-show="normalizerActionMessage" role="status" class="mt-3 text-sm text-white/90" x-text="normalizerActionMessage" style="display: none;"></p>
+                    <p x-show="normalizerActionError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerActionError" style="display: none;"></p>
+
+                    <details class="mt-4 border-t border-white/10 pt-3" :open="normalizerRequests.some(request => ['pending', 'processing', 'failed'].includes(request.status))">
+                        <summary class="normalizer-summary text-sm font-semibold text-white/90">Zadania Normalizeusza <span class="font-normal text-white/75" x-text="`(${normalizerRequests.length})`"></span></summary>
+                        <p x-show="normalizerStatus && normalizerRequests.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak zadań. Wybierz sprawdzenie albumów lub ReplayGain biblioteki.</p>
+                        <ol class="mt-3 max-h-96 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania Normalizeusza">
+                            <template x-for="(request, index) in normalizerRequests" :key="request.id">
+                                <li class="py-3 first:pt-0 last:pb-0">
+                                    <details :open="index === 0 || request.status === 'processing' || request.status === 'pending'">
+                                        <summary class="normalizer-summary text-xs leading-relaxed text-white/90">
+                                            <span class="font-semibold" x-text="normalizerOperationText(request.operation)"></span>
+                                            <span class="text-white/75" x-text="` · ${normalizerRequestStatus(request)}`"></span>
+                                        </summary>
+                                        <p class="mt-2 text-xs leading-relaxed text-white/85 normalizer-counts" x-text="normalizerProgressText(request)"></p>
+                                        <p x-show="request.progress?.current_path" class="mt-2 text-xs text-white/75" x-text="request.progress?.current_path" style="display: none;"></p>
+                                        <p x-show="request.error" class="mt-2 text-xs text-amber-200" x-text="request.error" style="display: none;"></p>
+                                        <div x-show="normalizerSamples(request).length" class="mt-3" style="display: none;">
+                                            <p class="text-xs font-medium text-white/85">Przykłady plików · maksymalnie 5</p>
+                                            <ul class="mt-1 space-y-2 text-xs text-white/75">
+                                                <template x-for="(sample, sampleIndex) in normalizerSamples(request)" :key="sampleIndex">
+                                                    <li>
+                                                        <p x-text="sample.path"></p>
+                                                        <p x-show="sample.album" x-text="`Album: ${sample.album}`" style="display: none;"></p>
+                                                    </li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                        <div x-show="normalizerSamples(request, true).length" class="mt-3" style="display: none;">
+                                            <p class="text-xs font-medium text-amber-200">Błędy plików · maksymalnie 5</p>
+                                            <ul class="mt-1 space-y-2 text-xs text-amber-200">
+                                                <template x-for="(sample, sampleIndex) in normalizerSamples(request, true)" :key="sampleIndex">
+                                                    <li><p x-text="sample.path"></p><p x-text="sample.error"></p></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                        <button type="button" x-show="request.status === 'failed'" @click="runNormalizer(request.operation)" :disabled="!canRunNormalizer(request.operation)"
+                                                :aria-label="`Ponów: ${normalizerOperationText(request.operation)}`" class="normalizer-action mt-3" style="display: none;">Ponów zadanie</button>
+                                    </details>
+                                </li>
+                            </template>
+                        </ol>
+                    </details>
+                </section>
 
                 <!-- spotdl Advanced Flags -->
                 <div x-show="selectedTool === 'spotdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
@@ -559,8 +751,41 @@
                     </div>
                 </div>
 
+                <div x-show="selectedTool === 'soulseek'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4" style="display: none;">
+                    <p class="text-sm leading-relaxed text-white/85">Wklej link do utworu, albumu lub playlisty ze Spotify albo YouTube. Muzyki poszukamy w Soulseek.</p>
+                    <label class="flex flex-wrap items-center justify-between gap-3 text-sm font-medium text-white/90">
+                        <span>Preferowany format</span>
+                        <select x-model="flags.preferred_format" class="bg-neutral-900 border border-white/20 rounded-lg px-3 py-2 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <option value="flac">FLAC</option>
+                            <option value="mp3">MP3</option>
+                        </select>
+                    </label>
+                    <label class="flex items-start gap-3 cursor-pointer text-sm text-white/90">
+                        <input type="checkbox" x-model="flags.youtube_fallback" class="mt-1 h-4 w-4 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" :style="`accent-color: ${getEffectiveColor()}`">
+                        <span>Pobierz z YouTube, jeśli utworu nie uda się znaleźć w Soulseek<span class="mt-1 block text-xs leading-relaxed text-white/75">Opcja jest domyślnie wyłączona. Zapasowe źródło może mieć niższą jakość.</span></span>
+                    </label>
+                    <div class="border-t border-white/10 pt-4 space-y-3">
+                        <label class="flex items-start gap-3 cursor-pointer text-sm text-white/90">
+                            <input type="checkbox" x-model="flags.generate_m3u" :disabled="!naviSync || !selectedNaviAccount"
+                                   class="mt-1 h-4 w-4 shrink-0 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" :style="`accent-color: ${getEffectiveColor()}`">
+                            <span>Utwórz playlistę w Navidrome</span>
+                        </label>
+                        <p x-show="!naviSync || !selectedNaviAccount" class="text-xs leading-relaxed text-white/75">W ustawieniach wybierz konto Navidrome i włącz synchronizację, aby tworzyć playlisty.</p>
+                        <div x-show="flags.generate_m3u && naviSync && selectedNaviAccount" class="space-y-3" style="display: none;">
+                            <label class="block text-xs font-medium text-white/85">
+                                Nazwa playlisty
+                                <input type="text" x-model="flags.m3u_name" placeholder="Nazwa z linku" class="mt-1.5 w-full bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer text-xs text-white/85">
+                                <input type="checkbox" x-model="flags.public_playlist" class="h-4 w-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" :style="`accent-color: ${getEffectiveColor()}`">
+                                <span>Playlista publiczna</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Command Preview -->
-                <div class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
+                <div x-show="selectedTool !== 'soulseek'" class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
                     <p class="text-[10px] uppercase text-white/60 font-bold mb-1 flex items-center gap-2">
                         <i class="ph ph-terminal"></i> Podgląd komendy
                     </p>
@@ -580,10 +805,10 @@
                 <button @click="startDownload()" 
                         class="w-full py-4 rounded-2xl font-bold text-lg shadow-xl hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                         :style="`background-color: ${getEffectiveColor()}; color: ${getTextColor()}`"
-                        :disabled="!url || loading">
+                        :disabled="!url.trim() || loading || importingBeets">
                     <i class="ph ph-download-simple text-xl" x-show="!loading"></i>
                     <i class="ph ph-spinner animate-spin text-xl" x-show="loading" style="display: none;"></i>
-                    <span x-text="loading ? 'Uruchamianie...' : 'Pobierz'"></span>
+                    <span x-text="loading ? 'Dodawanie…' : 'Dodaj do kolejki'"></span>
                 </button>
 
                 <!-- Status Message (Simple Mode) -->
@@ -594,6 +819,101 @@
                 </div>
 
             </div>
+
+            <section aria-labelledby="current-task-heading" x-show="currentJob" class="bento-box current-task p-6 w-full mb-6" style="display: none;">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <h2 id="current-task-heading" class="text-sm font-semibold text-white/95">Aktualne zadanie</h2>
+                        <p class="mt-1 text-sm font-medium text-white/90 break-words" x-text="currentJob ? jobTitle(currentJob) : ''"></p>
+                    </div>
+                    <button type="button" @click="showCurrentJobDetails()"
+                            class="shrink-0 min-h-11 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Pokaż szczegóły</button>
+                </div>
+                <p class="mt-3 text-sm font-medium text-white/95" role="status" aria-live="polite" x-text="currentJob ? jobStatusText(currentJob) : ''"></p>
+                <p x-show="currentTaskTrackText" class="mt-2 text-sm text-white/90 break-words" x-text="currentTaskTrackText"></p>
+                <p x-show="currentTaskTrackPosition" class="mt-1 text-xs text-white/75 tabular-nums" x-text="currentTaskTrackPosition"></p>
+                <div x-show="currentTaskSearch" class="current-task-search mt-3" style="display: none;">
+                    <p class="text-xs text-white/80">Zapytanie wyszukiwania <span x-show="currentTaskSearch?.attempt && currentTaskSearch?.total" class="tabular-nums" x-text="currentTaskSearch ? `· próba ${currentTaskSearch.attempt} z ${currentTaskSearch.total}` : ''"></span></p>
+                    <p class="mt-1 text-sm text-white/95 break-words" x-text="currentTaskSearch?.query || ''"></p>
+                </div>
+                <p x-show="currentTaskProgress" class="mt-3 text-xs text-white/85 tabular-nums" x-text="currentTaskProgress"></p>
+                <p x-show="currentTaskIssues" class="mt-1 text-xs text-amber-200" x-text="currentTaskIssues"></p>
+                <p x-show="currentTaskRetryText" class="mt-2 text-xs text-white/80 tabular-nums" x-text="currentTaskRetryText"></p>
+                <p x-show="currentJob?.error" class="mt-2 text-xs text-amber-200 break-words" x-text="currentJob?.error || ''"></p>
+            </section>
+
+            <section aria-labelledby="queue-heading" class="bento-box p-6 w-full mb-6">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 id="queue-heading" x-ref="queueHeading" tabindex="-1" class="text-sm font-semibold text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Kolejka zadań</h2>
+                        <p class="mt-1 text-xs text-white/80" role="status" aria-live="polite" x-text="queueSummary"></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="cancelJobs()" :disabled="!canCancelJobs" :aria-busy="cancellingJobs === '*'"
+                                title="Zatrzymaj wszystkie aktywne zadania; zachowaj pobrane pliki"
+                                class="min-h-10 px-3 py-2 text-xs font-semibold rounded-lg text-white/95 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <span x-text="cancellingJobs === '*' ? 'Zatrzymywanie…' : 'Zatrzymaj wszystko'"></span>
+                        </button>
+                        <button type="button" @click="fetchJobs()" :disabled="fetchingJobs" aria-label="Odśwież kolejkę"
+                                class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/90 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <p class="mt-3 text-xs leading-relaxed text-white/75">Zadania działają w tle. Możesz zamknąć stronę i wrócić, aby sprawdzić postęp.</p>
+                <p x-show="jobsError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsError" style="display: none;"></p>
+                <p x-show="jobsActionError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsActionError" style="display: none;"></p>
+                <p x-show="jobsActionMessage" role="status" aria-live="polite" class="mt-3 text-xs text-white/85 break-words" x-text="jobsActionMessage" style="display: none;"></p>
+                <p x-show="!fetchingJobs && !jobsError && jobs.length === 0" class="mt-4 text-sm text-white/80" style="display: none;">Wklej link i dodaj muzykę do kolejki.</p>
+                <ul class="mt-4 max-h-64 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania">
+                    <template x-for="job in jobs" :key="job.id">
+                        <li class="py-3 first:pt-0 last:pb-0">
+                            <div class="flex items-start gap-3">
+                                <button type="button" @click="selectJob(job.id)" :aria-pressed="activeJobId === job.id"
+                                        class="flex-1 min-w-0 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                    <span class="block text-sm font-medium break-words" :class="activeJobId === job.id ? 'text-white underline underline-offset-4' : 'text-white/85 hover:text-white'" x-text="jobTitle(job)"></span>
+                                    <span class="mt-1 block text-xs" :class="['failed', 'needs_review'].includes(job.status) ? 'text-amber-200' : 'text-white/80'" x-text="jobStatusText(job)"></span>
+                                    <span class="mt-1 block text-xs text-white/75 tabular-nums" x-text="jobTime(job)"></span>
+                                </button>
+                                <button type="button" x-show="jobCanRetry(job)" @click="retryJob(job)" :disabled="retryingJobId !== null || cancellingJobs !== ''"
+                                        :aria-label="`Ponów zadanie: ${jobTitle(job)}`"
+                                        class="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
+                                    <span x-text="retryingJobId === job.id ? 'Dodawanie…' : 'Ponów'"></span>
+                                </button>
+                                <button type="button" x-show="jobIsActive(job)" @click="cancelJobs(job)"
+                                        :disabled="cancellingJobs !== '' || retryingJobId !== null" :aria-busy="cancellingJobs === job.id"
+                                        :aria-label="`Zatrzymaj zadanie: ${jobTitle(job)}`" title="Zatrzymaj zadanie; zachowaj pobrane pliki"
+                                        class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
+                                    <i class="ph ph-trash" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <p x-show="job.error" class="mt-2 text-xs leading-relaxed text-amber-200 break-words" x-text="job.error" style="display: none;"></p>
+                        </li>
+                    </template>
+                </ul>
+                <p x-show="jobDetailsError" role="status" class="mt-3 text-xs text-amber-200" x-text="jobDetailsError" style="display: none;"></p>
+                <div x-show="jobDetails && jobTracksTotal > 0" :aria-busy="fetchingJobDetails" class="mt-4 border-t border-white/10 pt-4" style="display: none;">
+                    <h3 class="text-xs font-semibold text-white/90" x-text="jobDetails ? `Postęp utworów · ${jobTitle(jobDetails)}` : 'Postęp utworów'"></h3>
+                    <p id="job-track-range" class="mt-1 text-xs text-white/80 tabular-nums" role="status" aria-live="polite" x-text="jobTrackRange"></p>
+                    <ul id="job-track-list" class="mt-2 max-h-48 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Postęp utworów wybranego zadania" aria-describedby="job-track-range">
+                        <template x-for="track in visibleJobTracks" :key="track.position">
+                            <li class="py-2 text-xs">
+                                <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-white/85">
+                                    <span class="break-words min-w-0" x-text="track.title || `Utwór ${track.position + 1}`"></span>
+                                    <span class="shrink-0" x-text="trackStatusText(track)"></span>
+                                </div>
+                                <p x-show="track.error" class="mt-1 text-amber-200 break-words" x-text="track.error" style="display: none;"></p>
+                            </li>
+                        </template>
+                    </ul>
+                    <nav x-show="jobTracksTotal > jobTrackLimit" aria-label="Strony utworów" class="mt-3 flex flex-wrap justify-between gap-2" style="display: none;">
+                        <button type="button" @click="changeJobTrackPage(-1)" :disabled="fetchingJobDetails || jobTrackOffset === 0" aria-controls="job-track-list"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Poprzednie utwory</button>
+                        <button type="button" @click="changeJobTrackPage(1)" :disabled="fetchingJobDetails || jobTrackOffset + jobTrackLimit >= jobTracksTotal" aria-controls="job-track-list"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Następne utwory</button>
+                    </nav>
+                </div>
+            </section>
 
             <!-- Spotify Metadata Preview Bento Card -->
             <div x-show="spotifyMetadata" 
