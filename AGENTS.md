@@ -7,6 +7,12 @@
 - Testuj API w pamięci przez pytest i FastAPI TestClient/httpx. Nie uruchamiaj przeglądarek ani Playwrighta. Frontend jest statycznym HTML/CSS/JS bez osobnego procesu budowania; sprawdzaj składnię JS i działanie zmienionej logiki.
 - Nie deklaruj weryfikacji, której nie wykonano. Nie wdrażaj zmian, nie restartuj usług i nie ingeruj w dane, sekrety ani konfigurację produkcyjną bez wyraźnego zlecenia.
 
+## Aktualność README
+
+- Przy każdej trwałej zmianie sprawdzaj, czy README nadal opisuje rzeczywiste działanie, konfigurację i sposób uruchamiania aplikacji. Aktualizuj treść i przykłady, których dotyczy zmiana; samo podniesienie numeru wersji w nagłówku nie wystarcza.
+- Przykład Docker Compose w README musi odpowiadać aktualnemu `docker-compose.yml`: tag obrazu, porty i adres otwierania aplikacji, wolumeny, zmienne środowiskowe z wartościami domyślnymi oraz etykiety. Po zmianie konfiguracji porównaj przykład z plikiem źródłowym przed zakończeniem zadania.
+- Przy zmianach Dockerfile, zależności lub integracji aktualizuj również wymagania instalacyjne i opis współpracy z osobnymi usługami. Nie zostawiaj przestarzałych poleceń ani przykładów konfiguracji.
+
 ## Wersjonowanie
 
 Logika przejęta z sekcji 7–8 `/workspace/hapi/AGENTS.md`, dostosowana do istniejącego Downloadeusza.

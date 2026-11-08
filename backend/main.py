@@ -53,7 +53,7 @@ async def lifespan(app):
         await worker
 
 
-APP_VERSION = "2.9"
+APP_VERSION = "2.10"
 app = FastAPI(lifespan=lifespan, version=APP_VERSION)
 
 # Configuration

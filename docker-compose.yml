@@ -3,7 +3,7 @@ version: '3.8'
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.9
+    image: downloadeusz:2.10
     container_name: downloadeusz
     restart: unless-stopped
     ports:

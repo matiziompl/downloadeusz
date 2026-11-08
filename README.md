@@ -1,4 +1,4 @@
-# Downloadeusz (v2.9)
+# Downloadeusz (v2.10)
 
 **A modern, self-hosted Web UI for SpotDL, yt-dlp, and Soulseek (slskd) with deep Navidrome integration**
 
@@ -24,7 +24,7 @@ The standout features of Downloadeusz are its **direct integration with Navidrom
 
 ## 🚀 Installation & Setup (Docker)
 
-The recommended way to deploy Downloadeusz is using `docker-compose`.
+The recommended way to deploy Downloadeusz is using Docker Compose (`docker compose`).
 
 1. Clone this repository to your server.
 2. Create or edit your `docker-compose.yml` file:
@@ -35,22 +35,38 @@ version: '3.8'
 services:
   downloadeusz:
     build: .
+    image: downloadeusz:2.10
     container_name: downloadeusz
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "9000:8000"
     volumes:
+      # Wolumen dla pobranych plików - celuje do Twojego folderu muzyki
       - ~/media/music:/downloads
-      - ~/media/slskd/complete:/slskd_downloads
+      # Wolumen na pliki konfiguracyjne spotdl (youtube_cookies.txt, błędy)
       - ~/spotdl:/spotdl_config
+      # Wolumen na tapety
       - ~/media/wallpapers:/app/frontend/assets/wallpapers
+      # Wolumen na pobrane pliki z Soulseeka (slskd) do uporządkowania
+      - ~/media/slskd/complete:/slskd_downloads
     environment:
       - PUID=1000
       - PGID=1000
       - DOWNLOADS_DIR=/downloads
-      - SLSKD_DOWNLOADS_DIR=/slskd_downloads
       - SPOTDL_CONFIG_DIR=/spotdl_config
       - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
+      - SLSKD_DOWNLOADS_DIR=/slskd_downloads
+      # Beets kopiuje rozpoznaną muzykę do /downloads; oryginały zostają na miejscu.
+      - BEETS_ENABLED=${BEETS_ENABLED:-true}
+      - BEETS_AUTO_INTERVAL=${BEETS_AUTO_INTERVAL:-300}
+      - BEETS_INBOX_DIR=/spotdl_config/inbox
+      # Opcjonalnie login lub identyfikator konta Navidrome do automatycznego skanowania.
+      - BEETS_NAVI_ACCOUNT_ID=${BEETS_NAVI_ACCOUNT_ID:-}
+      # Normalizeusz pozostaje osobnym kontenerem, ze wspólną kolejką i biblioteką.
+      - NORMALIZATION_ENABLED=${NORMALIZATION_ENABLED:-true}
+      - NORMALIZATION_QUEUE_DIR=/spotdl_config/normalization
+      # Ten sam sekret ustaw w webhooku DownloadFileComplete w slskd.
+      - SLSKD_WEBHOOK_SECRET=${SLSKD_WEBHOOK_SECRET:-}
 ```
 
 > **Important:** Adjust the paths on the left side of the colon to match your server's directory structure.
@@ -59,11 +75,13 @@ services:
 > - `/spotdl_config` stores cookies like `youtube_cookies.txt` and logs.
 > - `/app/frontend/assets/wallpapers` allows you to upload custom wallpapers.
 
+Ten przykład odpowiada dołączonemu `docker-compose.yml`. Domyślnie włącza beets oraz współpracę z osobnym Normalizeuszem. Jeśli nie uruchamiasz Normalizeusza, ustaw `NORMALIZATION_ENABLED=false` w pliku `.env` obok Compose; w przeciwnym razie zadania będą czekać na potwierdzenie normalizacji. Konfigurację wspólnego katalogu opisuje sekcja „Potwierdzanie ReplayGain przez Normalizeusza”.
+
 3. Start the container:
 ```bash
 docker compose up --build -d
 ```
-4. Open your browser and navigate to: `http://<YOUR-SERVER-IP>:8000`
+4. Open your browser and navigate to: `http://<YOUR-SERVER-IP>:9000`
 
 ## Beets: automatyczne porządkowanie nowych pobrań
 
