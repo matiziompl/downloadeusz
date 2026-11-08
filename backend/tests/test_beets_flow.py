@@ -13,7 +13,7 @@ from backend.tests.test_durable_workflow import write_audio
 
 @pytest.fixture
 def beets_app(tmp_path, monkeypatch):
-    for setting in ("DOWNLOADS_DIR", "SLSKD_DOWNLOADS_DIR", "SPOTDL_CONFIG_DIR", "LOGS_DIR", "BEETS_INBOX_DIR"):
+    for setting in ("DOWNLOADS_DIR", "SLSKD_DOWNLOADS_DIR", "SPOTDL_CONFIG_DIR", "ACCOUNTS_DIR", "LOGS_DIR", "BEETS_INBOX_DIR"):
         directory = tmp_path / setting.lower()
         directory.mkdir()
         monkeypatch.setattr(main, setting, str(directory), raising=False)
@@ -261,7 +261,7 @@ def test_beets_sync_resolves_navidrome_account_by_username(beets_app):
     batch.mkdir()
     (batch / ".ready").touch()
     (batch / "song.flac").write_bytes(b"audio")
-    (Path(main.SPOTDL_CONFIG_DIR) / "navidrome_accounts.txt").write_text(
+    (Path(main.ACCOUNTS_DIR) / "navidrome_accounts.txt").write_text(
         'Server: "http://configured-navidrome:4533"\nuser: "listener"\npassword: "account-password"\n',
         encoding="utf-8",
     )

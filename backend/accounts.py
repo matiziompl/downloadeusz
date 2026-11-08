@@ -1,7 +1,8 @@
 import os
 import re
+from pathlib import Path
 
-SPOTDL_CONFIG_DIR = os.getenv("SPOTDL_CONFIG_DIR", "/spotdl_config")
+ACCOUNTS_DIR = os.getenv("ACCOUNTS_DIR") or str(Path(__file__).resolve().parent.parent)
 
 def parse_accounts_text(content: str) -> list[dict]:
     """
@@ -47,29 +48,13 @@ def parse_accounts_text(content: str) -> list[dict]:
 
 
 def get_accounts_file_path(filename: str, config_dir: str | None = None) -> str:
-    """
-    Finds the full path to an account configuration file.
-    Checks:
-    1. Specified config_dir or SPOTDL_CONFIG_DIR module variable
-    2. Current working directory
-    3. Parent directory of backend
-    """
-    base_config = config_dir or SPOTDL_CONFIG_DIR or os.getenv("SPOTDL_CONFIG_DIR", "/spotdl_config")
-    candidates = [
-        os.path.join(base_config, filename),
-        os.path.join(os.getcwd(), filename),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", filename),
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-    # Default to primary config dir location
-    return os.path.join(base_config, filename)
+    """Resolve only the chosen account directory, never unrelated working/config dirs."""
+    return os.path.join(config_dir or ACCOUNTS_DIR, filename)
 
 
 def get_navidrome_accounts(config_dir: str | None = None) -> list[dict]:
     """Reads and parses navidrome_accounts.txt dynamically on demand."""
-    path = get_accounts_file_path("navidrome_accounts.txt", config_dir or SPOTDL_CONFIG_DIR)
+    path = get_accounts_file_path("navidrome_accounts.txt", config_dir)
     if not os.path.exists(path):
         return []
     try:
@@ -82,7 +67,7 @@ def get_navidrome_accounts(config_dir: str | None = None) -> list[dict]:
 
 def get_slskd_accounts(config_dir: str | None = None) -> list[dict]:
     """Reads and parses slskd_accounts.txt dynamically on demand."""
-    path = get_accounts_file_path("slskd_accounts.txt", config_dir or SPOTDL_CONFIG_DIR)
+    path = get_accounts_file_path("slskd_accounts.txt", config_dir)
     if not os.path.exists(path):
         return []
     try:

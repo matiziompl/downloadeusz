@@ -2,6 +2,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
+from backend import accounts, main
 from backend.main import app
 
 client = TestClient(app)
@@ -23,8 +24,8 @@ user: "test_user"
 password: "test"
 """, encoding="utf-8")
 
-    with patch("backend.accounts.SPOTDL_CONFIG_DIR", str(tmp_path)), \
-         patch("backend.main.SPOTDL_CONFIG_DIR", str(tmp_path)):
+    with patch("backend.accounts.ACCOUNTS_DIR", str(tmp_path), create=True), \
+         patch("backend.main.ACCOUNTS_DIR", str(tmp_path), create=True):
         # Navidrome accounts
         resp_navi = client.get("/api/accounts/navidrome")
         assert resp_navi.status_code == 200
@@ -63,8 +64,8 @@ password: "test"
     }).encode("utf-8")
     mock_response.__enter__.return_value = mock_response
 
-    with patch("backend.accounts.SPOTDL_CONFIG_DIR", str(tmp_path)), \
-         patch("backend.main.SPOTDL_CONFIG_DIR", str(tmp_path)), \
+    with patch("backend.accounts.ACCOUNTS_DIR", str(tmp_path), create=True), \
+         patch("backend.main.ACCOUNTS_DIR", str(tmp_path), create=True), \
          patch("urllib.request.urlopen", return_value=mock_response):
         resp = client.post("/api/test/navidrome", json={
             "account_id": "http://test.pl::test_user"
@@ -93,8 +94,8 @@ password: "test"
     mock_downloads_resp.read.return_value = json.dumps([]).encode("utf-8")
     mock_downloads_resp.__enter__.return_value = mock_downloads_resp
 
-    with patch("backend.accounts.SPOTDL_CONFIG_DIR", str(tmp_path)), \
-         patch("backend.main.SPOTDL_CONFIG_DIR", str(tmp_path)), \
+    with patch("backend.accounts.ACCOUNTS_DIR", str(tmp_path), create=True), \
+         patch("backend.main.ACCOUNTS_DIR", str(tmp_path), create=True), \
          patch("urllib.request.urlopen", side_effect=[mock_session_resp, mock_downloads_resp]):
         resp = client.post("/api/test/slskd", json={})
         assert resp.status_code == 200
@@ -120,3 +121,33 @@ def test_post_spotify_metadata_endpoint():
         assert data["ok"] is True
         assert data["title"] == "Smells Like Teen Spirit"
         assert "PLIK_PIOSENKI.mp3" in data["command"]
+
+
+def test_account_api_uses_account_directory_and_reloads_without_exposing_secrets(tmp_path, monkeypatch):
+    account_dir, spotdl_dir = tmp_path / "accounts", tmp_path / "spotdl"
+    account_dir.mkdir()
+    spotdl_dir.mkdir()
+    for filename in ("navidrome_accounts.txt", "slskd_accounts.txt"):
+        (spotdl_dir / filename).write_text('Server: "http://stale"\nuser: "stale-user"\npassword: "stale-secret"\n')
+        (account_dir / filename).write_text('Server: "http://current"\nuser: "current-user"\npassword: "current-secret"\n')
+    monkeypatch.setattr(main, "ACCOUNTS_DIR", str(account_dir), raising=False)
+    monkeypatch.setattr(accounts, "ACCOUNTS_DIR", str(account_dir), raising=False)
+    monkeypatch.setattr(main, "SPOTDL_CONFIG_DIR", str(spotdl_dir))
+    monkeypatch.setattr(accounts, "SPOTDL_CONFIG_DIR", str(spotdl_dir), raising=False)
+    monkeypatch.chdir(spotdl_dir)
+
+    navi = client.get("/api/accounts/navidrome")
+    slskd = client.get("/api/accounts/slskd")
+    assert navi.status_code == slskd.status_code == 200
+    assert navi.json()["accounts"][0]["username"] == "current-user"
+    assert slskd.json()["username"] == "current-user"
+    assert "password" not in navi.text + slskd.text
+    assert "secret" not in navi.text + slskd.text
+    for filename in ("navidrome_accounts.txt", "slskd_accounts.txt"):
+        (account_dir / filename).write_text('Server: "http://updated"\nuser: "updated-user"\npassword: "updated-secret"\n')
+    assert client.get("/api/accounts/navidrome").json()["accounts"][0]["username"] == "updated-user"
+    assert client.get("/api/accounts/slskd").json()["username"] == "updated-user"
+    for filename in ("navidrome_accounts.txt", "slskd_accounts.txt"):
+        (account_dir / filename).unlink()
+    assert client.get("/api/accounts/navidrome").json()["accounts"] == []
+    assert client.get("/api/accounts/slskd").json()["configured"] is False

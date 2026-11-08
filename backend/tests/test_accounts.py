@@ -1,4 +1,6 @@
 import os
+import importlib.util
+from pathlib import Path
 import pytest
 from backend.accounts import (
     parse_accounts_text,
@@ -127,5 +129,80 @@ password: simple_pass
     assert accounts[1]["password"] == 'p@ss"w0rd!'
     assert accounts[2]["username"] == "unquoted_user"
     assert accounts[2]["password"] == "simple_pass"
+
+
+def test_default_account_directory_is_project_root_independent_of_cwd_and_spotdl(tmp_path, monkeypatch):
+    from backend import accounts as acc_mod
+
+    project = tmp_path / "project"
+    backend = project / "backend"
+    backend.mkdir(parents=True)
+    module_path = backend / "accounts.py"
+    module_path.write_text(Path(acc_mod.__file__).read_text(encoding="utf-8"), encoding="utf-8")
+    stale_config, other_cwd = tmp_path / "old-spotdl", tmp_path / "other-cwd"
+    stale_config.mkdir()
+    other_cwd.mkdir()
+    for directory, user in ((project, "project-user"), (stale_config, "stale-user"), (other_cwd, "cwd-user")):
+        for filename in ("navidrome_accounts.txt", "slskd_accounts.txt"):
+            (directory / filename).write_text(f'Server: "http://{user}"\nuser: "{user}"\npassword: "secret"\n')
+    monkeypatch.delenv("ACCOUNTS_DIR", raising=False)
+    monkeypatch.setenv("SPOTDL_CONFIG_DIR", str(stale_config))
+    monkeypatch.chdir(other_cwd)
+    spec = importlib.util.spec_from_file_location("isolated_accounts", module_path)
+    isolated_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(isolated_module)
+
+    assert isolated_module.get_navidrome_accounts()[0]["username"] == "project-user"
+    assert isolated_module.get_active_slskd_account()["username"] == "project-user"
+    assert Path(isolated_module.get_accounts_file_path("navidrome_accounts.txt")) == project / "navidrome_accounts.txt"
+
+
+def test_account_directory_environment_override_is_respected(tmp_path, monkeypatch):
+    from backend import accounts as acc_mod
+
+    override = tmp_path / "configured-accounts"
+    override.mkdir()
+    (override / "navidrome_accounts.txt").write_text('Server: "http://navi"\nuser: "override-user"\npassword: "secret"\n')
+    monkeypatch.setenv("ACCOUNTS_DIR", str(override))
+    monkeypatch.setenv("SPOTDL_CONFIG_DIR", str(tmp_path / "unrelated-spotdl"))
+    monkeypatch.chdir(tmp_path)
+    spec = importlib.util.spec_from_file_location("isolated_accounts_override", acc_mod.__file__)
+    isolated_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(isolated_module)
+
+    assert [account["username"] for account in isolated_module.get_navidrome_accounts()] == ["override-user"]
+
+
+@pytest.mark.parametrize("filename,reader", [
+    ("navidrome_accounts.txt", "get_navidrome_accounts"),
+    ("slskd_accounts.txt", "get_slskd_accounts"),
+])
+@pytest.mark.parametrize("explicit_directory", [True, False])
+def test_missing_accounts_in_selected_directory_never_fall_back_to_cwd(tmp_path, monkeypatch, filename, reader, explicit_directory):
+    from backend import accounts as acc_mod
+
+    selected, cwd, stale = tmp_path / "selected", tmp_path / "cwd", tmp_path / "old-spotdl"
+    selected.mkdir()
+    cwd.mkdir()
+    stale.mkdir()
+    (cwd / filename).write_text('Server: "http://wrong"\nuser: "wrong-user"\npassword: "old-secret"\n')
+    (stale / filename).write_text('Server: "http://stale"\nuser: "stale-user"\npassword: "old-secret"\n')
+    monkeypatch.setattr(acc_mod, "ACCOUNTS_DIR", str(selected), raising=False)
+    monkeypatch.setattr(acc_mod, "SPOTDL_CONFIG_DIR", str(stale), raising=False)
+    monkeypatch.chdir(cwd)
+    arguments = {"config_dir": str(selected)} if explicit_directory else {}
+
+    assert getattr(acc_mod, reader)(**arguments) == []
+    assert Path(acc_mod.get_accounts_file_path(filename, **arguments)) == selected / filename
+
+
+def test_account_changes_are_reloaded_on_each_read(tmp_path):
+    from backend import accounts as acc_mod
+
+    account_file = tmp_path / "navidrome_accounts.txt"
+    account_file.write_text('Server: "http://navi"\nuser: "listener"\npassword: "first-secret"\n')
+    assert acc_mod.get_navidrome_account_by_id("listener", config_dir=str(tmp_path))["password"] == "first-secret"
+    account_file.write_text('Server: "http://navi"\nuser: "listener"\npassword: "updated-secret"\n')
+    assert acc_mod.get_navidrome_account_by_id("listener", config_dir=str(tmp_path))["password"] == "updated-secret"
 
 
