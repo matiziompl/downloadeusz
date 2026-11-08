@@ -1,4 +1,4 @@
-# Downloadeusz (v2.10)
+# Downloadeusz (v2.12)
 
 **A modern, self-hosted Web UI for SpotDL, yt-dlp, and Soulseek (slskd) with deep Navidrome integration**
 
@@ -30,12 +30,10 @@ The recommended way to deploy Downloadeusz is using Docker Compose (`docker comp
 2. Create or edit your `docker-compose.yml` file:
 
 ```yaml
-version: '3.8'
-
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.10
+    image: downloadeusz:2.12
     container_name: downloadeusz
     restart: unless-stopped
     ports:
@@ -45,6 +43,19 @@ services:
       - ~/media/music:/downloads
       # Wolumen na pliki konfiguracyjne spotdl (youtube_cookies.txt, błędy)
       - ~/spotdl:/spotdl_config
+      # Prywatne pliki kont obok docker-compose.yml; nie są kopiowane do obrazu.
+      - type: bind
+        source: ./navidrome_accounts.txt
+        target: /app/navidrome_accounts.txt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./slskd_accounts.txt
+        target: /app/slskd_accounts.txt
+        read_only: true
+        bind:
+          create_host_path: false
       # Wolumen na tapety
       - ~/media/wallpapers:/app/frontend/assets/wallpapers
       # Wolumen na pobrane pliki z Soulseeka (slskd) do uporządkowania
@@ -54,6 +65,7 @@ services:
       - PGID=1000
       - DOWNLOADS_DIR=/downloads
       - SPOTDL_CONFIG_DIR=/spotdl_config
+      - ACCOUNTS_DIR=/app
       - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
       - SLSKD_DOWNLOADS_DIR=/slskd_downloads
       # Beets kopiuje rozpoznaną muzykę do /downloads; oryginały zostają na miejscu.
@@ -72,10 +84,12 @@ services:
 > **Important:** Adjust the paths on the left side of the colon to match your server's directory structure.
 > - `/downloads` is the destination for downloaded music (mount your Navidrome music folder here).
 > - `/slskd_downloads` is where your slskd (Soulseek) downloads complete.
-> - `/spotdl_config` stores cookies like `youtube_cookies.txt` and logs.
+> - `/spotdl_config` stores cookies like `youtube_cookies.txt`, the durable queue and beets state. Account files are mounted separately from the directory containing Compose.
 > - `/app/frontend/assets/wallpapers` allows you to upload custom wallpapers.
 
 Ten przykład odpowiada dołączonemu `docker-compose.yml`. Domyślnie włącza beets oraz współpracę z osobnym Normalizeuszem. Jeśli nie uruchamiasz Normalizeusza, ustaw `NORMALIZATION_ENABLED=false` w pliku `.env` obok Compose; w przeciwnym razie zadania będą czekać na potwierdzenie normalizacji. Konfigurację wspólnego katalogu opisuje sekcja „Potwierdzanie ReplayGain przez Normalizeusza”.
+
+Przed uruchomieniem umieść oba pliki `navidrome_accounts.txt` i `slskd_accounts.txt` obok `docker-compose.yml`; plik dla nieużywanej usługi może pozostać pusty. Są montowane tylko do odczytu. Brak pliku zatrzymuje uruchomienie zamiast tworzyć katalog o jego nazwie. Format opisano w sekcji o kontach poniżej.
 
 3. Start the container:
 ```bash
@@ -128,7 +142,12 @@ Przy włączonym beets playlisty przechodzą przez ten sam import co pozostałe 
 
 ### Powiadomienia slskd
 
-Ustaw `SLSKD_WEBHOOK_SECRET` w środowisku Downloadeusza i taki sam sekret w konfiguracji slskd. Adres powinien być osiągalny z kontenera slskd:
+Webhook jest opcjonalny. Nie pobierasz go ani nie generujesz w panelu: Downloadeusz już udostępnia odbiornik pod `/api/slskd/events`, a w konfiguracji slskd wskazujesz, aby wysyłało tam powiadomienia po pobraniu pliku. Bez webhooka automatyczny import nadal sprawdza ukończone pobrania domyślnie co 300 sekund, jeśli harmonogram jest włączony i kolejka nie została wstrzymana.
+
+1. Wygeneruj własny sekret poleceniem `openssl rand -hex 32`.
+2. W pliku `.env` obok Compose Downloadeusza ustaw `SLSKD_WEBHOOK_SECRET=` z wygenerowaną wartością. Jest to osobny sekret tej integracji, nie klucz API slskd. Nowa wartość zostanie odczytana po odtworzeniu kontenera Downloadeusza.
+3. Poniższy fragment dodaj do **pliku `slskd.yml` usługi slskd**, nie do Compose Downloadeusza. Jeżeli sekcja `integrations` już istnieje, dodaj do niej `webhooks` bez tworzenia drugiej sekcji o tej samej nazwie. Pod `value` wstaw ten sam sekret.
+4. Zastąp `ADRES_DOWNLOADEUSZA` adresem serwera, na którym działa Downloadeusz. Pełny URL to adres aplikacji z dopisanym `/api/slskd/events`; przy domyślnym mapowaniu portów jest to `http://ADRES_DOWNLOADEUSZA:9000/api/slskd/events`. Musi być osiągalny **z kontenera slskd**. `localhost` w osobnym kontenerze oznacza ten kontener, a nie Downloadeusza. Jeśli obie usługi są w tej samej sieci Docker, można użyć `http://downloadeusz:8000/api/slskd/events`.
 
 ```yaml
 integrations:
@@ -143,6 +162,8 @@ integrations:
       retry:
         attempts: 3
 ```
+
+slskd obserwuje swój plik YAML i wczytuje jego zmiany; ewentualną potrzebę restartu sygnalizuje w interfejsie. Sposób zapisu webhooków opisuje [oficjalna dokumentacja slskd](https://github.com/slskd/slskd/blob/master/docs/config.md#webhooks). Gdy nie używasz webhooka, pozostaw `SLSKD_WEBHOOK_SECRET` pusty i nie dodawaj tej integracji w slskd.
 
 Webhook jedynie zleca sprawdzenie ukończonych transferów; ścieżka z jego treści nie daje prawa do importu pliku. Powtórzenia identyfikatorów zdarzeń są pomijane, a harmonogram pozostaje mechanizmem uzgadniania stanu. `/slskd_downloads` nadal musi wskazywać faktyczny katalog pobrań slskd.
 
@@ -170,9 +191,13 @@ Historia panelu i raporty są ograniczone do najnowszych wpisów i próbek; licz
 
 W wersji 2.1 konta są definiowane w plikach konfiguracyjnych na serwerze i sczytywane dynamicznie w locie (bez zapisywania haseł w przeglądarce).
 
-Pliki należy umieścić w zamontowanym katalogu `~/spotdl/` (który kontener widzi jako `/spotdl_config`):
+Pliki należy umieścić **obok `docker-compose.yml` w katalogu działającej aplikacji**. Na Serweuszu jest to `~/docker/downloadeusz/`. Compose używa ścieżek względnych `./navidrome_accounts.txt` i `./slskd_accounts.txt`, więc katalog można przenieść bez zmiany kodu. W kontenerze pliki są dostępne w `/app`, ustawionym przez `ACCOUNTS_DIR`.
 
-1. **`~/spotdl/navidrome_accounts.txt`**:
+Na istniejącym Serweuszu rzeczywiste pliki kont są już w tym katalogu. Aktualizacja zachowuje je na miejscu; nie kopiuje kont z workspace ani nie zastępuje ich plikami przykładowymi.
+
+Zmiany zapisane w istniejącym pliku są odczytywane przy odświeżeniu kont. Jeśli edytor zastąpi cały plik nowym przez zmianę nazwy, montowanie pojedynczego pliku może nadal wskazywać poprzednią wersję; wtedy trzeba odtworzyć kontener, aby podpiąć nowy plik.
+
+1. **`navidrome_accounts.txt` obok Compose**:
    ```text
    Server: "http://192.168.1.102:4533"
    user: "mateusz"
@@ -182,13 +207,15 @@ Pliki należy umieścić w zamontowanym katalogu `~/spotdl/` (który kontener wi
    ```
    W ustawieniach Downloadeusza konta pojawią się w rozwijanej liście (`<select>`). Wystarczy wybrać konto, którego chcesz używać. Kliknięcie ikony odświeżenia natychmiast zaktualizuje listę kont bez restartowania kontenera.
 
-2. **`~/spotdl/slskd_accounts.txt`**:
+2. **`slskd_accounts.txt` obok Compose**:
    ```text
    Server: "http://192.168.1.102:5030"
    user: "twoj_uzytkownik"
    password: "twoje_haslo"
    ```
    Downloadeusz automatycznie wykryje serwer Soulseek i użytkownika, umożliwiając testowanie połączenia oraz uruchamianie automatycznego porządkowania pobranych plików („Uporządkuj pliki”).
+
+Poza Dockerem domyślny katalog kont to główny katalog projektu, wyznaczany względem pliku modułu, a nie bieżącego katalogu terminala. Można go zmienić zmienną środowiskową `ACCOUNTS_DIR`. `SPOTDL_CONFIG_DIR` nie określa już lokalizacji kont; ciasteczka, kolejka i stan beets pozostają w swoim dotychczasowym katalogu. Stare pliki kont w `~/spotdl/` nie są automatycznie odczytywane. Oba prywatne pliki są wykluczone przez `.gitignore` i `.dockerignore`; nie są kopiowane do obrazu ani nadpisywane przy aktualizacji aplikacji.
 
 3. **Pobieranie samych metadanych ze Spotify & Generator FFmpeg**:
    - Wklej link ze Spotify (utwór lub album) w zakładce Spotify.

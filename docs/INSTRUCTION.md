@@ -57,6 +57,14 @@ Każde wyszukiwanie slskd otrzymuje limit bezczynności 5 sekund, przekazany jak
 
 Dodatki opisujące publikację, np. „Official Audio”, oraz rozpoznane dopiski wydania, np. „Remastered 2011”, są usuwane z tożsamości wyszukiwania. Oznaczenia nagrania, np. „Live”, „Remix”, „Acoustic” czy „Instrumental”, pozostają istotne przy porównaniu wyników. Mieszane, niejednoznaczne dopiski są zachowywane. Szersze zapytanie nie oznacza zgody na pobranie innego wykonawcy lub innej wersji. Brak danych potrzebnych do potwierdzenia wyniku pozostawia utwór do sprawdzenia.
 
+## Opcjonalne powiadomienia po pobraniu w slskd
+
+Webhook to wpis w konfiguracji `slskd.yml`, który kieruje powiadomienia `DownloadFileComplete` na istniejący adres Downloadeusza `/api/slskd/events`. Nie trzeba uzyskiwać go z zewnętrznej usługi. Pełny adres przy domyślnym porcie to `http://ADRES_DOWNLOADEUSZA:9000/api/slskd/events`; musi być dostępny z kontenera slskd.
+
+Własny sekret wygenerujesz poleceniem `openssl rand -hex 32`. Tę samą wartość wpisz do `SLSKD_WEBHOOK_SECRET` w `.env` obok Compose Downloadeusza oraz do nagłówka `X-Webhook-Key` w konfiguracji webhooka slskd. Pełny przykład sekcji `integrations.webhooks` i kolejne kroki znajdują się w README, w części „Powiadomienia slskd”. Zmiana sekretu Downloadeusza wymaga odtworzenia jego kontenera.
+
+Webhook jest opcjonalny: przy włączonym harmonogramie i niewstrzymanej kolejce import sprawdza ukończone pobrania domyślnie co 300 sekund. Bez webhooka możesz pozostawić sekret pusty.
+
 ## Aktualne zadanie
 
 Pomiędzy głównym formularzem a kolejką pojawia się kafelek **Aktualne zadanie**. Śledzi pracę serwera niezależnie od tego, które zadanie zaznaczysz w historii. Pokazuje etap pracy, aktualny utwór i jego pozycję, liczbę zakończonych utworów oraz błędy lub pozycje wymagające sprawdzenia.
@@ -114,7 +122,7 @@ W ustawieniach, w sekcji **Integracja z Navidrome**, wybierz konto z listy i kli
 
 Przy włączonym beets natywna playlista powstaje po imporcie i skanie Navidrome z zachowaniem kolejności, posiadanych utworów oraz powtórzeń. Brakujące wpisy indeksu mogą opóźnić zakończenie do 10 minut; niepełny wynik wymaga sprawdzenia. Ponowienie aktualizuje zapisaną playlistę.
 
-Konta dodaje administrator do `navidrome_accounts.txt` w `/spotdl_config`:
+Konta dodaje administrator do `navidrome_accounts.txt` obok `docker-compose.yml` w katalogu działającej aplikacji (na Serweuszu: `~/docker/downloadeusz`). Compose montuje ten plik tylko do odczytu jako `/app/navidrome_accounts.txt`:
 
 ```text
 Server: "http://NAVIDROME:4533"
@@ -126,7 +134,7 @@ Dla kolejnych użytkowników tego serwera dodaj kolejne pary `user` i `password`
 
 ## slskd — konfiguracja i status
 
-Administrator umieszcza plik `slskd_accounts.txt` w `/spotdl_config`:
+Administrator umieszcza plik `slskd_accounts.txt` obok tego samego `docker-compose.yml`. Compose montuje go tylko do odczytu jako `/app/slskd_accounts.txt`:
 
 ```text
 Server: "http://SLSKD:5030"

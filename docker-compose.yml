@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.10
+    image: downloadeusz:2.12
     container_name: downloadeusz
     restart: unless-stopped
     ports:
@@ -13,6 +11,19 @@ services:
       - ~/media/music:/downloads
       # Wolumen na pliki konfiguracyjne spotdl (youtube_cookies.txt, błędy)
       - ~/spotdl:/spotdl_config
+      # Prywatne pliki kont obok docker-compose.yml; nie są kopiowane do obrazu.
+      - type: bind
+        source: ./navidrome_accounts.txt
+        target: /app/navidrome_accounts.txt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./slskd_accounts.txt
+        target: /app/slskd_accounts.txt
+        read_only: true
+        bind:
+          create_host_path: false
       # Wolumen na tapety
       - ~/media/wallpapers:/app/frontend/assets/wallpapers
       # Wolumen na pobrane pliki z Soulseeka (slskd) do uporządkowania
@@ -22,6 +33,7 @@ services:
       - PGID=1000
       - DOWNLOADS_DIR=/downloads
       - SPOTDL_CONFIG_DIR=/spotdl_config
+      - ACCOUNTS_DIR=/app
       - WALLPAPERS_DIR=/app/frontend/assets/wallpapers
       - SLSKD_DOWNLOADS_DIR=/slskd_downloads
       # Beets kopiuje rozpoznaną muzykę do /downloads; oryginały zostają na miejscu.

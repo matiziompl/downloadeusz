@@ -53,7 +53,7 @@ async def lifespan(app):
         await worker
 
 
-APP_VERSION = "2.10"
+APP_VERSION = "2.12"
 app = FastAPI(lifespan=lifespan, version=APP_VERSION)
 
 # Configuration
@@ -62,6 +62,7 @@ FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 WALLPAPERS_DIR = os.getenv("WALLPAPERS_DIR", os.path.join(FRONTEND_DIR, "assets", "wallpapers"))
 DOWNLOADS_DIR = os.getenv("DOWNLOADS_DIR", "/downloads")
 SPOTDL_CONFIG_DIR = os.getenv("SPOTDL_CONFIG_DIR", "/spotdl_config")
+ACCOUNTS_DIR = accounts.ACCOUNTS_DIR
 SLSKD_DOWNLOADS_DIR = os.getenv("SLSKD_DOWNLOADS_DIR", "/slskd_downloads")
 BEETS_ENABLED = os.getenv("BEETS_ENABLED", "false").lower() in {"1", "true", "yes"}
 BEETS_AUTO_INTERVAL = max(0, int(os.getenv("BEETS_AUTO_INTERVAL", "300")))
@@ -202,7 +203,7 @@ def enqueue_normalizer(operation, navi_account_id=""):
     state = normalizer_bridge.snapshot(NORMALIZATION_QUEUE_DIR)
     if not state["available"] or operation not in state["capabilities"]:
         raise HTTPException(503, "Normalizeusz jest niedostępny lub wymaga aktualizacji")
-    if navi_account_id and not accounts.get_navidrome_account_by_id(navi_account_id, SPOTDL_CONFIG_DIR):
+    if navi_account_id and not accounts.get_navidrome_account_by_id(navi_account_id, ACCOUNTS_DIR):
         raise HTTPException(400, "Nie znaleziono wybranego konta Navidrome")
     title = {"preview_albums": "Podgląd brakujących albumów", "repair_albums": "Uzupełnianie pustych albumów",
              "scan_library": "ReplayGain całej biblioteki"}[operation]
@@ -471,7 +472,7 @@ def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callbac
         errors = []
         sources = []
         slskd_url, slskd_user, slskd_password = request.slskd_url, request.slskd_user, request.slskd_pass
-        account = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+        account = accounts.get_active_slskd_account(ACCOUNTS_DIR)
         if account and not slskd_url:
             slskd_url = account.get("server", "")
             slskd_user = account.get("username", "")
@@ -519,7 +520,7 @@ def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callbac
         if organized or updated:
             fix_download_permissions(DOWNLOADS_DIR)
             if request.navi_sync and not defer_finalize and not NORMALIZATION_ENABLED:
-                navi = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, SPOTDL_CONFIG_DIR)
+                navi = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, ACCOUNTS_DIR)
                 navi_url = (navi or {}).get("server", request.navi_url)
                 navi_user = (navi or {}).get("username", request.navi_user)
                 navi_password = (navi or {}).get("password", request.navi_pass)
@@ -570,7 +571,7 @@ def job_log(identity, message):
 
 
 def navi_services(payload):
-    account = accounts.get_navidrome_account_by_id(payload.get("navi_account_id") or payload.get("navi_user", ""), SPOTDL_CONFIG_DIR) or {}
+    account = accounts.get_navidrome_account_by_id(payload.get("navi_account_id") or payload.get("navi_user", ""), ACCOUNTS_DIR) or {}
     url = account.get("server") or payload.get("navi_url")
     user = account.get("username") or payload.get("navi_user")
     password = account.get("password") or payload.get("navi_pass")
@@ -727,7 +728,7 @@ def process_download_job(store, job):
     elif lookup and active["status"] == "queued" and (payload.get("flags", {}).get("check_navidrome") or payload["tool"] == "soulseek") and (song := lookup({**track, "_skip_mode": payload.get("flags", {}).get("navidrome_skip_mode", "flac_only")}, [])):
         store.update_track(identity, position, status="existing", result={"navidrome_id": song["id"]})
     else:
-        if payload["tool"] == "soulseek" and not accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR):
+        if payload["tool"] == "soulseek" and not accounts.get_active_slskd_account(ACCOUNTS_DIR):
             raise RuntimeError("Brak konta slskd w konfiguracji serwera")
         try:
             if payload["tool"] == "soulseek" and not result.get("fallback"):
@@ -801,7 +802,7 @@ def process_soulseek_track(store, job, row):
         import soulseek_search
     identity, position = job["id"], row["position"]
     payload, track, result = job["payload"], dict(row["payload"]), dict(row["result"])
-    account = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+    account = accounts.get_active_slskd_account(ACCOUNTS_DIR)
     if not account:
         raise RuntimeError("Brak konta slskd w konfiguracji serwera")
     if row["status"] == "transferring":
@@ -1016,7 +1017,7 @@ async def pipeline_worker(stop):
 
 @app.get("/api/accounts/navidrome")
 async def get_navidrome_accounts_endpoint():
-    accs = accounts.get_navidrome_accounts(SPOTDL_CONFIG_DIR)
+    accs = accounts.get_navidrome_accounts(ACCOUNTS_DIR)
     safe_accs = [
         {"id": a["id"], "server": a["server"], "username": a["username"]}
         for a in accs
@@ -1025,7 +1026,7 @@ async def get_navidrome_accounts_endpoint():
 
 @app.get("/api/accounts/slskd")
 async def get_slskd_account_endpoint():
-    acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+    acc = accounts.get_active_slskd_account(ACCOUNTS_DIR)
     if acc:
         return {"configured": True, "server": acc["server"], "username": acc["username"]}
     return {"configured": False}
@@ -1051,7 +1052,7 @@ async def test_navidrome(req: NaviTestRequest):
     if (req.account_id or not password):
         lookup_id = req.account_id or req.user
         if lookup_id:
-            acc = accounts.get_navidrome_account_by_id(lookup_id, SPOTDL_CONFIG_DIR)
+            acc = accounts.get_navidrome_account_by_id(lookup_id, ACCOUNTS_DIR)
             if acc:
                 url = acc.get("server") or url
                 user = acc.get("username") or user
@@ -1090,7 +1091,7 @@ async def test_slskd(req: SlskdTestRequest):
 
     # If credentials not provided, auto-load active account from slskd_accounts.txt
     if not password and not api_key:
-        acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+        acc = accounts.get_active_slskd_account(ACCOUNTS_DIR)
         if acc:
             url = url or acc.get("server", "")
             username = username or acc.get("username", "")
@@ -1151,7 +1152,7 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             slskd_pass = request.slskd_pass
             slskd_api_key = request.slskd_api_key
             if not slskd_url or (not slskd_pass and not slskd_api_key):
-                acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+                acc = accounts.get_active_slskd_account(ACCOUNTS_DIR)
                 if acc:
                     slskd_url = slskd_url or acc.get("server", "")
                     slskd_user = slskd_user or acc.get("username", "")
@@ -1161,7 +1162,7 @@ def run_slskd_organize_task(task_id: str, request: SlskdOrganizeRequest):
             navi_user = request.navi_user
             navi_pass = request.navi_pass
             if request.navi_sync and (request.navi_account_id or not navi_pass):
-                n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, SPOTDL_CONFIG_DIR)
+                n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, ACCOUNTS_DIR)
                 if n_acc:
                     navi_url = n_acc.get("server", navi_url)
                     navi_user = n_acc.get("username", navi_user)
@@ -1221,7 +1222,7 @@ def run_download_task(task_id: str, request: DownloadRequest, defer_finalize=Fal
         navi_user = request.navi_user
         navi_pass = request.navi_pass
         if request.navi_account_id or not navi_pass:
-            n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, SPOTDL_CONFIG_DIR)
+            n_acc = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, ACCOUNTS_DIR)
             if n_acc:
                 navi_url = n_acc.get("server", navi_url)
                 navi_user = n_acc.get("username", navi_user)
@@ -1599,7 +1600,7 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 async def start_slskd_organize(request: SlskdOrganizeRequest, background_tasks: BackgroundTasks):
     effective_url = request.slskd_url
     if not effective_url:
-        acc = accounts.get_active_slskd_account(SPOTDL_CONFIG_DIR)
+        acc = accounts.get_active_slskd_account(ACCOUNTS_DIR)
         if acc:
             effective_url = acc.get("server", "")
 
