@@ -1,8 +1,9 @@
 FROM python:3.11-slim
+LABEL org.opencontainers.image.version="2.9"
 
-# Install system dependencies (ffmpeg is crucial for both spotdl and yt-dlp, curl/unzip for deno)
+# FFmpeg decodes audio; fpcalc supplies Chromaprint recognition for untagged tracks.
 RUN apt-get update && apt-get install -y \
-    ffmpeg curl unzip \
+    ffmpeg libchromaprint-tools curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Deno (required by newer spotdl versions for youtube-music resolution)
@@ -22,6 +23,8 @@ RUN pip install --no-cache-dir spotdl yt-dlp
 # Copy application files
 COPY backend /app/backend
 COPY frontend /app/frontend
+COPY README.md /app/README.md
+COPY docs /app/docs
 
 WORKDIR /app/backend
 

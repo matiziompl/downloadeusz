@@ -9,3 +9,5 @@ logs/
 .env
 navidrome_accounts.txt
 slskd_accounts.txt
+.venv/
+backend/tests/

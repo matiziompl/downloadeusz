@@ -6,7 +6,13 @@ import hashlib
 import secrets
 import json
 import subprocess
+from uuid import UUID
 from typing import Dict, List, Any, Optional, Tuple, Callable
+
+try:
+    from backend.beetsplug.downloadeusz_policy import versions_conflict, _duration, _usable
+except ImportError:
+    from beetsplug.downloadeusz_policy import versions_conflict, _duration, _usable
 
 POLISH_TRANS = str.maketrans({
     'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
@@ -97,7 +103,12 @@ def search_navidrome_song(
     navi_user: str,
     navi_pass: str,
     artist: str,
-    title: str
+    title: str,
+    *,
+    length: Optional[float] = None,
+    recording_id: Optional[str] = None,
+    skip_mode: str = "all",
+    required_paths: Optional[List[str]] = None
 ) -> Optional[Dict[str, Any]]:
     """Search Navidrome Subsonic API for a song matching artist and title."""
     if not navi_url or not navi_user or not navi_pass:
@@ -107,7 +118,7 @@ def search_navidrome_song(
     c_target_artist = clean_string(artist)
 
     # If title is empty after cleaning, never match
-    if not c_target_title:
+    if not c_target_title or not _usable(artist) or not _usable(title):
         return None
 
     def sanitize_search_query(text: str) -> str:
@@ -120,6 +131,10 @@ def search_navidrome_song(
 
     queries_to_try = [q for q in [primary_query, fallback_query] if q]
     seen_queries = set()
+    matches = []
+    seen_songs = set()
+    source_length = _duration(length)
+    source_recording = musicbrainz_recording_id({"recording_id": recording_id})
 
     for query_text in queries_to_try:
         if query_text in seen_queries:
@@ -145,39 +160,60 @@ def search_navidrome_song(
                 songs = data.get("subsonic-response", {}).get("searchResult2", {}).get("song", [])
 
             for song in songs:
+                identity = json.dumps(song, sort_keys=True)
+                if identity in seen_songs:
+                    continue
+                seen_songs.add(identity)
                 c_song_title = clean_string(song.get("title", ""))
                 c_song_artist = clean_string(song.get("artist", ""))
 
-                if not c_song_title:
+                if not c_song_title or not _usable(song.get("artist")) or not _usable(song.get("title")):
                     continue
-
-                # Title matching:
-                # For short titles (<= 4 chars, e.g. "One", "War", "Run"), require exact match
-                if len(c_target_title) <= 4 or len(c_song_title) <= 4:
-                    title_match = (c_target_title == c_song_title)
-                else:
-                    title_match = (
-                        c_target_title == c_song_title
-                        or c_target_title.startswith(c_song_title + " ")
-                        or c_song_title.startswith(c_target_title + " ")
-                    )
-
-                # Artist matching:
-                artist_match = (
-                    not c_target_artist
-                    or not c_song_artist
-                    or c_target_artist == c_song_artist
-                    or c_target_artist in c_song_artist
-                    or c_song_artist in c_target_artist
-                )
-
-                if title_match and artist_match:
-                    return song
+                if c_target_title != c_song_title or c_target_artist != c_song_artist:
+                    continue
+                if versions_conflict(title, song.get("title", "")):
+                    continue
+                candidate_recording = musicbrainz_recording_id(song)
+                if source_recording and candidate_recording and source_recording != candidate_recording:
+                    continue
+                candidate_length = _duration(song.get("duration") or song.get("length"))
+                if source_length:
+                    tolerance = max(2.0, min(5.0, source_length * 0.02))
+                    if candidate_length and abs(source_length - candidate_length) > tolerance:
+                        continue
+                    if not candidate_length and not (source_recording and source_recording == candidate_recording):
+                        continue
+                if required_paths:
+                    server_path = str(song.get("path", "")).replace("\\", "/").lstrip("/")
+                    if not server_path or not any(server_path == path or server_path.endswith("/" + path)
+                                                  for path in required_paths):
+                        continue
+                matches.append(song)
 
         except Exception:
             pass
 
-    return None
+    ids = {musicbrainz_recording_id(song) for song in matches} - {""}
+    if len(ids) > 1:
+        return None
+    if not source_length and not (source_recording and ids == {source_recording}):
+        lengths = [_duration(song.get("duration") or song.get("length")) for song in matches]
+        lengths = [value for value in lengths if value]
+        if lengths and max(lengths) - min(lengths) > max(2.0, min(5.0, min(lengths) * 0.02)):
+            return None
+    if skip_mode == "flac_only":
+        matches = [song for song in matches if is_lossless(song.get("suffix"), song.get("contentType"), song.get("path"))]
+    return next(iter(matches), None)
+
+
+def musicbrainz_recording_id(metadata: Dict[str, Any]) -> str:
+    """Accept MusicBrainz recording UUIDs, never service-specific track IDs."""
+    value = next((metadata.get(key) for key in ("recording_id", "musicbrainz_recording_id",
+                  "mb_recordingid", "musicBrainzId", "mb_trackid") if metadata.get(key)), "")
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return ""
 
 def filter_existing_songs(
     songs: List[Dict[str, Any]],
@@ -212,7 +248,10 @@ def filter_existing_songs(
             navi_user=navi_user,
             navi_pass=navi_pass,
             artist=artist,
-            title=title
+            title=title,
+            length=song.get("length") or song.get("duration"),
+            recording_id=musicbrainz_recording_id(song),
+            skip_mode=skip_mode
         )
 
         if match:
@@ -278,6 +317,9 @@ def extract_ytdl_metadata(url: str, timeout: int = 30) -> List[Dict[str, Any]]:
                 "name": title,
                 "artists": [artist] if artist else [],
                 "url": entry_url,
+                "length": e.get("duration"),
+                "recording_id": musicbrainz_recording_id(e),
+                "source_id": e.get("id", ""),
                 "_raw": e
             })
         return entries

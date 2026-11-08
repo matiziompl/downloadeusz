@@ -2,6 +2,19 @@ function appData() {
     return {
         // App State
         settingsOpen: false,
+        appVersion: '',
+        documentationOpen: false,
+        documentationSection: 'readme',
+        documentationHtml: '',
+        documentationLoading: false,
+        documentationError: '',
+        documentationController: null,
+        documentationPreviousOverflow: '',
+        documentationTabs: [
+            { id: 'readme', label: 'README' },
+            { id: 'latest', label: 'Ostatnia wersja' },
+            { id: 'instructions', label: 'Instrukcja' }
+        ],
         loading: false,
         statusMsg: '',
         statusError: false,
@@ -9,6 +22,27 @@ function appData() {
         // SSE Event Source
         eventSource: null,
         logs: [],
+        logsTaskId: '',
+        jobs: [],
+        currentJob: null,
+        jobCounts: null,
+        jobsError: '',
+        jobsActionMessage: '',
+        jobsActionError: '',
+        cancellingJobs: '',
+        cancelJobsController: null,
+        fetchingJobs: false,
+        jobsPollTimer: null,
+        jobsController: null,
+        jobDetailsController: null,
+        activeJobId: localStorage.getItem('downloadeusz_active_job') || '',
+        jobDetails: null,
+        jobDetailsError: '',
+        fetchingJobDetails: false,
+        jobTrackOffset: 0,
+        jobTrackLimit: 100,
+        retryingJobId: null,
+        destroyed: false,
         
         // Services & Integrations
         naviAccounts: [],
@@ -21,6 +55,133 @@ function appData() {
         testingNavi: false,
         testingSlskd: false,
         organizingSlskd: false,
+        beetsStatus: null,
+        beetsStatusError: '',
+        beetsImportError: '',
+        beetsReviewItems: [],
+        beetsReviewLimit: 20,
+        beetsReviewError: '',
+        fetchingBeetsReview: false,
+        retryingBeetsReviewId: null,
+        fetchingBeets: false,
+        importingBeets: false,
+        beetsPollTimer: null,
+        normalizerStatus: null,
+        normalizerError: '',
+        normalizerActionError: '',
+        normalizerActionMessage: '',
+        fetchingNormalizer: false,
+        submittingNormalizer: '',
+        normalizerController: null,
+        normalizerActionController: null,
+
+        get normalizerRequests() {
+            return (this.normalizerStatus?.requests || []).slice(0, 20);
+        },
+
+        get normalizerStatusText() {
+            if (this.normalizerError) return 'Stan nieaktualny · brak połączenia';
+            if (!this.normalizerStatus) return 'Sprawdzanie stanu…';
+            if (!this.normalizerStatus.available) return 'Normalizeusz niedostępny';
+            const counts = this.normalizerStatus.counts;
+            return `Połączono · W kolejce: ${counts.pending} · W toku: ${counts.processing}`;
+        },
+
+        get normalizerAlbumPreview() {
+            // The API returns newest first: a failed or pending newer preview invalidates the old one.
+            return this.normalizerRequests.find(item => item.operation === 'preview_albums') || null;
+        },
+
+        get normalizerAlbumRepairReady() {
+            const preview = this.normalizerAlbumPreview;
+            if (preview?.status !== 'done' || !(preview.result?.changed > 0)) return false;
+            const repair = this.normalizerRequests.find(item => item.operation === 'repair_albums');
+            return !repair || (Number(preview.created_at) > Number(repair.created_at));
+        },
+
+        canRunNormalizer(operation) {
+            if (this.destroyed || this.normalizerError || this.submittingNormalizer
+                || !this.normalizerStatus?.available
+                || !this.normalizerStatus.capabilities.includes(operation)) return false;
+            if (this.normalizerRequests.some(item => item.operation === operation
+                && ['pending', 'processing'].includes(item.status))) return false;
+            return operation !== 'repair_albums' || this.normalizerAlbumRepairReady;
+        },
+
+        normalizerOperationText(operation) {
+            return { preview_albums: 'Sprawdzenie brakujących albumów',
+                repair_albums: 'Uzupełnianie pustych albumów',
+                scan_library: 'Sprawdzenie ReplayGain biblioteki',
+                normalize: 'ReplayGain plików po imporcie' }[operation] || 'Zadanie Normalizeusza';
+        },
+
+        normalizerRequestStatus(request) {
+            return { pending: 'W kolejce', processing: 'W toku', done: 'Zakończone', failed: 'Błąd' }[request.status] || 'Nieznany stan';
+        },
+
+        normalizerProgressText(request) {
+            const progress = request.result || request.progress;
+            if (!progress) return request.status === 'pending'
+                ? 'Czeka na rozpoczęcie przez Normalizeusza.' : 'Oczekiwanie na dane postępu.';
+            const count = value => Number.isFinite(value) && value >= 0 ? value : 0;
+            const total = Number.isFinite(progress.total) && progress.total > 0 ? ` z ${progress.total}` : '';
+            if (request.operation === 'scan_library') return `Sprawdzone: ${count(progress.processed)}${total} · Błędy: ${count(progress.errors)}`;
+            const changed = request.operation === 'preview_albums' ? 'Do uzupełnienia' : 'Zmienione';
+            return `Sprawdzone: ${count(progress.processed)}${total} · ${changed}: ${count(progress.changed)} · Pominięte: ${count(progress.skipped)} · Błędy: ${count(progress.errors)}`;
+        },
+
+        normalizerSamples(request, errors = false) {
+            const samples = request.result?.[errors ? 'error_samples' : 'samples'];
+            return Array.isArray(samples) ? samples.slice(0, 5) : [];
+        },
+
+        get beetsStatusText() {
+            if (this.beetsStatusError) return this.beetsStatusError;
+            if (!this.beetsStatus) return 'Sprawdzanie stanu…';
+            if (!this.beetsStatus.enabled) return 'Wyłączony';
+            if (!this.beetsStatus.available) return 'Niedostępny na serwerze';
+            if (this.beetsStatus.running) return 'Porządkowanie w toku…';
+            if (this.beetsStatus.last_error) return 'Ostatni import wymaga sprawdzenia';
+            return 'Gotowy do importu';
+        },
+
+        get beetsScheduleText() {
+            if (!this.beetsStatus?.enabled || !this.beetsStatus.available) return '';
+            const seconds = Number(this.beetsStatus.auto_interval);
+            if (!Number.isFinite(seconds) || seconds <= 0) return 'Import automatyczny wyłączony';
+            return seconds % 60 === 0
+                ? `Sprawdzanie nowych plików co ${seconds / 60} min`
+                : `Sprawdzanie nowych plików co ${seconds} s`;
+        },
+
+        get canImportBeets() {
+            return Boolean(this.beetsStatus?.enabled && this.beetsStatus.available
+                && !this.beetsStatus.running && !this.fetchingBeets && !this.importingBeets
+                && !this.loading && !this.organizingSlskd);
+        },
+
+        get beetsReviewSummary() {
+            if (this.beetsReviewError) return 'Do sprawdzenia · lista niedostępna';
+            if (this.fetchingBeetsReview) return 'Do sprawdzenia · wczytywanie…';
+            return `Do sprawdzenia (${this.beetsReviewItems.length})`;
+        },
+
+        beetsReviewFilename(item) {
+            return String(item.source || '').split(/[\\/]/).pop() || 'Nieznany plik';
+        },
+
+        beetsReviewStatus(item) {
+            if (item.source_changed) return 'Źródło zmienione, dotychczasowa kopia zachowana';
+            if (item.imported && item.metadata_confirmed && item.release_confirmed && item.artwork_pending) return 'Nagranie rozpoznane, okładka do uzupełnienia';
+            if (item.metadata_confirmed && !item.release_confirmed) return 'Nagranie rozpoznane, wydanie niepotwierdzone';
+            return item.imported ? 'Dodany według tagów' : 'Czeka na import';
+        },
+
+        beetsCandidateText(candidate) {
+            const song = [candidate.artist, candidate.title].filter(Boolean).join(' — ');
+            const album = [candidate.album, candidate.year].filter(Boolean).join(' · ');
+            return [song, album].filter(Boolean).join(' / ') || 'Propozycja bez opisu';
+        },
 
         // Spotify Metadata
         spotifyMetadata: null,
@@ -49,6 +210,8 @@ function appData() {
             threads: 1,
             generate_m3u: false,
             public_playlist: false,
+            preferred_format: 'flac',
+            youtube_fallback: false,
             m3u_name: '', // empty means {list}
             check_navidrome: false,
             navidrome_skip_mode: 'flac_only'
@@ -106,9 +269,20 @@ function appData() {
 
         initApp() {
             this.loadSettings();
+            this.fetchVersion();
             this.fetchAccounts();
             this.fetchWallpapers();
             this.fetchErrors();
+            this.fetchBeetsStatus();
+            this.fetchJobs();
+            this.fetchNormalizer();
+            this.jobsPollTimer = setInterval(() => {
+                this.fetchJobs();
+                if (!document.hidden) this.fetchNormalizer();
+            }, 5000);
+            this.beetsPollTimer = setInterval(() => {
+                if (!document.hidden) this.fetchBeetsStatus();
+            }, 15000);
             
             // Watch for changes and save to local storage
             this.$watch('showTitle', () => this.saveSettings());
@@ -127,7 +301,7 @@ function appData() {
             
             // Auto-detect tool based on URL (Spotify -> spotdl, YouTube/SoundCloud -> ytdl)
             this.$watch('url', value => {
-                if (!value) return;
+                if (!value || this.selectedTool === 'soulseek') return;
                 const lower = value.trim().toLowerCase();
                 if (lower.includes('spotify.com') || lower.includes('open.spotify.com')) {
                     this.selectedTool = 'spotdl';
@@ -156,6 +330,91 @@ function appData() {
             this.$nextTick(() => {
                 this.updateExtractedColor();
             });
+        },
+
+        destroy() {
+            this.destroyed = true;
+            clearInterval(this.beetsPollTimer);
+            clearInterval(this.jobsPollTimer);
+            clearTimeout(this.copiedMetaFeedbackTimer);
+            this.jobsController?.abort();
+            this.cancelJobsController?.abort();
+            this.jobDetailsController?.abort();
+            this.documentationController?.abort();
+            this.normalizerController?.abort();
+            this.normalizerActionController?.abort();
+            this.eventSource?.close();
+        },
+
+        async fetchVersion() {
+            try {
+                const response = await fetch('/api/version');
+                if (!response.ok) return;
+                const data = await response.json();
+                this.appVersion = data.version || '';
+            } catch (_) {
+                // The documentation request also provides the version when available.
+            }
+        },
+
+        openDocumentation() {
+            this.settingsOpen = false;
+            this.errorsOpen = false;
+            this.documentationPreviousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.$refs.documentationDialog.showModal();
+            this.documentationOpen = true;
+            this.loadDocumentation(this.documentationSection);
+        },
+
+        closeDocumentation() {
+            this.$refs.documentationDialog.close();
+        },
+
+        documentationClosed() {
+            this.documentationOpen = false;
+            this.documentationController?.abort();
+            document.body.style.overflow = this.documentationPreviousOverflow;
+            this.$refs.documentationTrigger.focus();
+        },
+
+        async loadDocumentation(section) {
+            if (!this.documentationTabs.some(tab => tab.id === section)) return;
+            this.documentationController?.abort();
+            const controller = new AbortController();
+            this.documentationController = controller;
+            this.documentationSection = section;
+            this.documentationHtml = '';
+            this.documentationError = '';
+            this.documentationLoading = true;
+            this.$refs.documentationPanel.scrollTop = 0;
+            try {
+                const response = await fetch(`/api/documentation/${section}`, { signal: controller.signal });
+                if (!response.ok) throw new Error('Nie udało się wczytać dokumentacji. Spróbuj ponownie.');
+                const data = await response.json();
+                if (controller !== this.documentationController || controller.signal.aborted) return;
+                if (typeof data.html !== 'string' || !data.html.trim()) throw new Error('Ten dokument jest pusty. Spróbuj ponownie po aktualizacji aplikacji.');
+                this.documentationHtml = data.html;
+                this.appVersion = data.version || this.appVersion;
+            } catch (error) {
+                if (controller === this.documentationController && !controller.signal.aborted) {
+                    this.documentationError = error.message || 'Nie udało się wczytać dokumentacji. Spróbuj ponownie.';
+                }
+            } finally {
+                if (controller === this.documentationController) this.documentationLoading = false;
+            }
+        },
+
+        documentationTabKeydown(event) {
+            const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+            if (!keys.includes(event.key)) return;
+            event.preventDefault();
+            const tabs = this.documentationTabs;
+            const current = tabs.findIndex(tab => tab.id === this.documentationSection);
+            const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+            this.loadDocumentation(tabs[index].id);
+            this.$nextTick(() => document.getElementById(`documentation-tab-${tabs[index].id}`).focus());
         },
         
         toggleSettings() {
@@ -204,7 +463,9 @@ function appData() {
                             ...this.flags,
                             ...settings.flags,
                             check_navidrome: settings.flags.check_navidrome ?? false,
-                            navidrome_skip_mode: (settings.flags.navidrome_skip_mode === 'all') ? 'all' : 'flac_only'
+                            navidrome_skip_mode: (settings.flags.navidrome_skip_mode === 'all') ? 'all' : 'flac_only',
+                            preferred_format: settings.flags.preferred_format === 'mp3' ? 'mp3' : 'flac',
+                            youtube_fallback: settings.flags.youtube_fallback === true
                         };
                     } else {
                         this.flags.navidrome_skip_mode = 'flac_only';
@@ -365,15 +626,306 @@ function appData() {
             }
         },
         
+        get currentTaskTrackText() {
+            const track = this.currentJob?.current_track;
+            return track ? [track.artist, track.title].filter(Boolean).join(' — ') : '';
+        },
+
+        get currentTaskTrackPosition() {
+            const job = this.currentJob;
+            if (!Number.isInteger(job?.current_track?.position)) return '';
+            return `Utwór ${job.current_track.position + 1} z ${job.tracks_total}`;
+        },
+
+        get currentTaskSearch() {
+            return this.currentJob?.status === 'running' && this.currentJob.stage === 'searching'
+                ? this.currentJob.search : null;
+        },
+
+        get currentTaskProgress() {
+            const job = this.currentJob;
+            if (!job?.tracks_total) return '';
+            const counts = job.track_counts || {};
+            const completed = ['imported', 'existing', 'done', 'skipped'].reduce((sum, status) => sum + (counts[status] || 0), 0);
+            return `Zakończone utwory: ${completed} z ${job.tracks_total}`;
+        },
+
+        get currentTaskIssues() {
+            const counts = this.currentJob?.track_counts || {};
+            return [counts.failed ? `Błędy: ${counts.failed}` : '',
+                counts.needs_review ? `Do sprawdzenia: ${counts.needs_review}` : ''].filter(Boolean).join(' · ');
+        },
+
+        get currentTaskRetryText() {
+            const job = this.currentJob;
+            if (job?.status !== 'waiting' || !(job.next_attempt * 1000 > Date.now())) return '';
+            const time = new Date(job.next_attempt * 1000).toLocaleTimeString('pl-PL', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            return `Następne sprawdzenie: ${time}`;
+        },
+
+        async showCurrentJobDetails() {
+            if (!this.currentJob) return;
+            await this.selectJob(this.currentJob.id);
+            this.$refs.queueHeading.scrollIntoView({ block: 'start' });
+            this.$refs.queueHeading.focus({ preventScroll: true });
+        },
+
+        get queueSummary() {
+            if (!this.jobCounts) return this.jobsError ? 'Stan chwilowo niedostępny' : 'Wczytywanie zadań…';
+            const counts = this.jobCounts;
+            const active = (counts.queued || 0) + (counts.running || 0) + (counts.waiting || 0);
+            const review = (counts.failed || 0) + (counts.needs_review || 0);
+            return `Aktywne: ${active} · Do sprawdzenia: ${review}`;
+        },
+
+        jobTitle(job) {
+            return job.title || ({ import: 'Import muzyki', organize: 'Porządkowanie plików Soulseek',
+                soulseek: 'Pobieranie z Soulseek' }[job.kind]) || 'Pobieranie muzyki';
+        },
+
+        jobIsActive(job) {
+            return ['queued', 'running', 'waiting'].includes(job.status);
+        },
+
+        jobCanRetry(job) {
+            return ['failed', 'needs_review', 'cancelled'].includes(job.status);
+        },
+
+        get canCancelJobs() {
+            if (this.destroyed || this.cancellingJobs || this.retryingJobId) return false;
+            const counts = this.jobCounts || {};
+            return (counts.queued || 0) + (counts.running || 0) + (counts.waiting || 0) > 0
+                || this.jobs.some(job => this.jobIsActive(job));
+        },
+
+        jobStatusText(job) {
+            const stage = { queued: 'Przygotowanie zadania', resolving: 'Odczytywanie listy utworów',
+                checking: 'Sprawdzanie biblioteki', downloading: 'Pobieranie', searching: 'Wyszukiwanie w Soulseek',
+                transferring: 'Pobieranie z Soulseek',
+                organizing: 'Porządkowanie plików Soulseek', finalizing: 'Kończenie zadania',
+                importing: 'Importowanie do biblioteki', normalizing: 'Wyrównywanie głośności · ReplayGain',
+                scanning: 'Skanowanie Navidrome', playlist: 'Tworzenie playlisty w Navidrome', done: 'Gotowe' }[job.stage] || 'Przetwarzanie';
+            if (job.status === 'queued') return 'W kolejce';
+            if (job.status === 'done') return 'Gotowe';
+            if (job.status === 'cancelled') return 'Zatrzymano';
+            if (job.status === 'failed') return job.stage === 'done' ? 'Błąd' : `Błąd · ${stage}`;
+            if (job.status === 'needs_review') return job.stage === 'done' ? 'Do sprawdzenia' : `Do sprawdzenia · ${stage}`;
+            return job.status === 'waiting' ? `Oczekiwanie · ${stage}` : stage;
+        },
+
+        jobTime(job) {
+            const date = new Date(Number(job.created) * 1000);
+            return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pl-PL', {
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+            });
+        },
+
+        trackStatusText(track) {
+            return { queued: 'W kolejce', running: 'W toku', waiting: 'Oczekiwanie', downloading: 'Pobieranie',
+                retry: 'Oczekiwanie na ponowienie',
+                transferring: 'Pobieranie z Soulseek', downloaded: 'Pobrano', imported: 'W bibliotece',
+                existing: 'Już w bibliotece', done: 'Gotowe', skipped: 'Pominięto',
+                failed: 'Błąd', needs_review: 'Do sprawdzenia', cancelled: 'Zatrzymano' }[track.status] || 'W toku';
+        },
+
+        get jobTracksTotal() {
+            return this.jobDetails?.tracks_total ?? this.jobDetails?.tracks?.length ?? 0;
+        },
+
+        get visibleJobTracks() {
+            const tracks = this.jobDetails?.tracks || [];
+            const offset = this.jobDetails?.tracks_offset === undefined ? this.jobTrackOffset : 0;
+            return tracks.slice(offset, offset + this.jobTrackLimit);
+        },
+
+        get jobTrackRange() {
+            const offset = this.jobDetails?.tracks_offset ?? this.jobTrackOffset;
+            const length = this.visibleJobTracks.length;
+            return `Utwory ${length ? offset + 1 : 0}–${offset + length} z ${this.jobTracksTotal}`;
+        },
+
+        async changeJobTrackPage(direction) {
+            if (this.fetchingJobDetails || !this.activeJobId) return;
+            const offset = this.jobTrackOffset + direction * this.jobTrackLimit;
+            if (offset < 0 || offset >= this.jobTracksTotal) return;
+            this.jobTrackOffset = offset;
+            await this.selectJob(this.activeJobId);
+        },
+
+        async fetchJobs() {
+            if (this.fetchingJobs || this.destroyed) return;
+            this.fetchingJobs = true;
+            const controller = new AbortController();
+            this.jobsController = controller;
+            try {
+                const response = await fetch('/api/jobs', { signal: controller.signal });
+                if (!response.ok) throw new Error('Queue unavailable');
+                const data = await response.json();
+                if (!Array.isArray(data.items)) throw new Error('Invalid queue');
+                if (this.destroyed || controller.signal.aborted) return;
+                this.jobs = data.items;
+                this.currentJob = data.current_job || null;
+                this.jobCounts = data.counts || {};
+                this.jobsError = '';
+                const selected = this.activeJobId || this.jobs.find(job => this.jobIsActive(job))?.id || this.jobs[0]?.id;
+                if (selected) await this.selectJob(selected);
+            } catch (error) {
+                if (error.name !== 'AbortError' && !this.destroyed && !controller.signal.aborted) {
+                    this.currentJob = null;
+                    this.jobsError = 'Nie udało się odświeżyć kolejki. Ponowimy próbę za chwilę.';
+                }
+            } finally {
+                if (this.jobsController === controller) this.fetchingJobs = false;
+            }
+        },
+
+        async selectJob(taskId) {
+            if (this.destroyed) return;
+            const changed = this.activeJobId !== taskId;
+            this.activeJobId = taskId;
+            localStorage.setItem('downloadeusz_active_job', taskId);
+            if (changed) {
+                this.jobTrackOffset = 0;
+                this.jobDetails = null;
+                this.jobDetailsError = '';
+                this.eventSource?.close();
+                this.eventSource = null;
+                this.logsTaskId = '';
+                this.logs = [];
+            }
+            this.jobDetailsController?.abort();
+            const controller = new AbortController();
+            this.jobDetailsController = controller;
+            this.fetchingJobDetails = true;
+            try {
+                const response = await fetch(`/api/jobs/${encodeURIComponent(taskId)}?offset=${this.jobTrackOffset}&limit=${this.jobTrackLimit}`, { signal: controller.signal });
+                if (!response.ok) {
+                    if (response.status === 404 && this.activeJobId === taskId) {
+                        this.activeJobId = '';
+                        localStorage.removeItem('downloadeusz_active_job');
+                    }
+                    throw new Error('Job unavailable');
+                }
+                const job = await response.json();
+                if (this.destroyed || controller.signal.aborted || this.activeJobId !== taskId) return;
+                const previousStatus = this.jobDetails?.status;
+                this.jobDetails = job;
+                this.jobDetailsError = '';
+                this.statusMsg = `${this.jobTitle(job)} · ${this.jobStatusText(job)}`;
+                this.statusError = ['failed', 'needs_review'].includes(job.status);
+                if (this.jobIsActive(job)) {
+                    if (this.logsTaskId !== taskId) this.connectLogs(taskId);
+                } else {
+                    if (this.logsTaskId === taskId) this.eventSource?.close();
+                    if (previousStatus !== job.status) {
+                        this.fetchBeetsStatus();
+                        this.fetchErrors();
+                    }
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError' && !this.destroyed && this.activeJobId === taskId) {
+                    this.jobDetailsError = 'Nie udało się wczytać postępu. Ponowimy próbę za chwilę.';
+                }
+            } finally {
+                if (this.jobDetailsController === controller) this.fetchingJobDetails = false;
+            }
+        },
+
+        async cancelJobs(job = null) {
+            if (this.destroyed || this.cancellingJobs || this.retryingJobId || (job && !this.jobIsActive(job))) return;
+            this.cancellingJobs = job ? job.id : '*';
+            this.jobsActionMessage = '';
+            this.jobsActionError = '';
+            const controller = new AbortController();
+            this.cancelJobsController = controller;
+            try {
+                const url = job ? `/api/jobs/${encodeURIComponent(job.id)}/cancel` : '/api/jobs/cancel';
+                const response = await fetch(url, { method: 'POST', signal: controller.signal });
+                const data = await response.json();
+                if (!response.ok || data.status !== 'cancelled') {
+                    throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się zatrzymać zadania. Spróbuj ponownie.');
+                }
+                if (this.destroyed) return;
+                this.jobsController?.abort();
+                this.jobDetailsController?.abort();
+                this.fetchingJobs = false;
+                const affected = item => item && (!job || item.id === job.id) && this.jobIsActive(item);
+                if (affected(this.currentJob)) this.currentJob = null;
+                const selected = affected(this.jobDetails);
+                for (const item of [...this.jobs, this.jobDetails]) {
+                    if (affected(item)) {
+                        item.status = 'cancelled';
+                        item.error = '';
+                    }
+                }
+                if (!job || this.logsTaskId === job.id) {
+                    this.eventSource?.close();
+                    this.eventSource = null;
+                    this.logsTaskId = '';
+                }
+                if (selected) {
+                    this.statusMsg = `${this.jobTitle(this.jobDetails)} · Zatrzymano`;
+                    this.statusError = false;
+                }
+                this.jobsActionMessage = data.message || (job ? 'Zatrzymano zadanie. Pliki pozostają na dysku.'
+                    : `Zatrzymano zadania: ${data.cancelled}. Pliki pozostają na dysku.`);
+                await this.fetchJobs();
+            } catch (error) {
+                if (!this.destroyed && error.name !== 'AbortError') {
+                    this.jobsActionError = error instanceof TypeError
+                        ? 'Nie udało się połączyć z serwerem. Spróbuj ponownie.' : error.message;
+                }
+            } finally {
+                this.cancellingJobs = '';
+            }
+        },
+
+        async retryJob(job) {
+            if (!this.jobCanRetry(job) || this.retryingJobId || this.cancellingJobs || this.destroyed) return;
+            this.jobsActionMessage = '';
+            this.jobsActionError = '';
+            this.retryingJobId = job.id;
+            this.jobsError = '';
+            try {
+                const response = await fetch(`/api/jobs/${encodeURIComponent(job.id)}/retry`, { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok || !data.task_id) {
+                    throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się ponowić zadania.');
+                }
+                if (this.destroyed) return;
+                job.status = data.status || 'queued';
+                job.error = '';
+                this.connectLogs(data.task_id);
+                await this.selectJob(data.task_id);
+                this.fetchJobs();
+            } catch (error) {
+                if (!this.destroyed) this.jobsError = error instanceof TypeError
+                    ? 'Nie udało się połączyć z serwerem. Spróbuj ponownie.' : error.message;
+            } finally {
+                this.retryingJobId = null;
+            }
+        },
+
         connectLogs(taskId) {
+            if (this.destroyed) return;
+            if (this.activeJobId !== taskId) this.jobTrackOffset = 0;
             if (this.eventSource) {
                 this.eventSource.close();
             }
             
             this.logs = [];
+            if (this.jobDetails?.id !== taskId) this.jobDetails = null;
+            this.jobDetailsError = '';
+            this.logsTaskId = taskId;
+            this.activeJobId = taskId;
+            localStorage.setItem('downloadeusz_active_job', taskId);
             this.eventSource = new EventSource(`/api/logs/${taskId}`);
+            const source = this.eventSource;
             
             this.eventSource.onmessage = (event) => {
+                if (this.destroyed || this.eventSource !== source) return;
                 this.logs.push(event.data);
                 
                 // Auto scroll to bottom
@@ -384,20 +936,13 @@ function appData() {
                     }
                 });
                 
-                if (event.data.includes('[Zakończono') || event.data.includes('[Błąd]')) {
-                    this.eventSource.close();
-                    this.loading = false;
-                    this.organizingSlskd = false;
-                    this.fetchErrors(); // Fetch errors after download finishes
-                }
+                // Download log markers can precede import, ReplayGain and the Navidrome scan.
             };
             
             this.eventSource.onerror = () => {
-                this.eventSource.close();
-                this.loading = false;
-                this.organizingSlskd = false;
-                this.logs.push("Utracono połączenie z logami.");
-                this.fetchErrors();
+                if (this.eventSource !== source || this.destroyed) return;
+                const message = 'Utracono połączenie z logami. Postęp zadania jest nadal widoczny w kolejce.';
+                if (this.logs[this.logs.length - 1] !== message) this.logs.push(message);
             };
         },
         
@@ -429,6 +974,158 @@ function appData() {
                 console.error('Failed to fetch accounts', error);
             } finally {
                 this.checkServicesStatus();
+                this.fetchBeetsStatus();
+            }
+        },
+
+        async fetchNormalizer(force = false) {
+            if (this.destroyed || (this.fetchingNormalizer && !force)) return;
+            if (force) this.normalizerController?.abort();
+            const controller = new AbortController();
+            this.normalizerController = controller;
+            this.fetchingNormalizer = true;
+            try {
+                const response = await fetch('/api/normalizer', { signal: controller.signal });
+                if (!response.ok) throw new Error('Status unavailable');
+                const data = await response.json();
+                if (!data || typeof data.available !== 'boolean' || typeof data.enabled !== 'boolean'
+                    || !Array.isArray(data.capabilities) || !Array.isArray(data.requests)
+                    || !Number.isInteger(data.counts?.pending) || !Number.isInteger(data.counts?.processing)) {
+                    throw new Error('Invalid status');
+                }
+                if (this.destroyed || controller.signal.aborted) return;
+                data.requests = data.requests.filter(item => item && typeof item.id === 'string').slice(0, 20);
+                this.normalizerStatus = data;
+                this.normalizerError = '';
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted) {
+                    this.normalizerError = 'Nie udało się odświeżyć stanu Normalizeusza. Odśwież, aby spróbować ponownie. Wyświetlone zadania mogą być nieaktualne.';
+                }
+            } finally {
+                if (this.normalizerController === controller) {
+                    this.fetchingNormalizer = false;
+                    this.normalizerController = null;
+                }
+            }
+        },
+
+        async runNormalizer(operation) {
+            if (!this.canRunNormalizer(operation)) return;
+            this.submittingNormalizer = operation;
+            this.normalizerActionError = '';
+            this.normalizerActionMessage = '';
+            const controller = new AbortController();
+            this.normalizerActionController = controller;
+            try {
+                const response = await fetch('/api/normalizer/jobs', {
+                    method: 'POST', signal: controller.signal,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ operation, navi_account_id: this.selectedNaviAccount || '' })
+                });
+                const data = await response.json();
+                if (this.destroyed || controller.signal.aborted) return;
+                if (!response.ok || typeof data.id !== 'string' || data.status !== 'pending') {
+                    throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się dodać zadania. Odśwież stan i spróbuj ponownie.');
+                }
+                this.normalizerActionMessage = data.warning || 'Dodano zadanie do kolejki Normalizeusza.';
+                this.normalizerStatus.requests.unshift({ id: data.id, operation, status: 'pending', created_at: Date.now() / 1000 });
+                await this.fetchNormalizer(true);
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted) {
+                    this.normalizerActionError = error instanceof TypeError
+                        ? 'Nie udało się połączyć z serwerem. Odśwież stan przed ponowieniem zadania.'
+                        : error.message || 'Nie udało się dodać zadania. Spróbuj ponownie.';
+                    await this.fetchNormalizer(true);
+                }
+            } finally {
+                this.submittingNormalizer = '';
+                this.normalizerActionController = null;
+            }
+        },
+
+        async fetchBeetsStatus() {
+            if (this.fetchingBeets) return;
+            this.fetchingBeets = true;
+            try {
+                const response = await fetch('/api/beets/status');
+                if (!response.ok) throw new Error('Status unavailable');
+                const data = await response.json();
+                if (!data || typeof data.enabled !== 'boolean' || typeof data.available !== 'boolean') {
+                    throw new Error('Invalid status');
+                }
+                this.beetsStatus = data;
+                this.beetsStatusError = '';
+                if (data.enabled) {
+                    await this.fetchBeetsReview();
+                } else {
+                    this.beetsReviewItems = [];
+                    this.beetsReviewError = '';
+                }
+            } catch (error) {
+                this.beetsStatus = null;
+                this.beetsStatusError = 'Nie udało się sprawdzić stanu. Odśwież, aby spróbować ponownie.';
+                this.beetsReviewItems = [];
+                this.beetsReviewError = 'Lista będzie dostępna po przywróceniu połączenia z serwerem.';
+            } finally {
+                this.fetchingBeets = false;
+            }
+        },
+
+        async fetchBeetsReview() {
+            if (this.fetchingBeetsReview) return;
+            this.fetchingBeetsReview = true;
+            try {
+                const response = await fetch('/api/beets/review');
+                if (!response.ok) throw new Error('Review unavailable');
+                const data = await response.json();
+                if (!Array.isArray(data.items)) throw new Error('Invalid review');
+                this.beetsReviewItems = data.items.filter(item => item && typeof item.id === 'string'
+                    && !(item.imported && item.metadata_confirmed && item.release_confirmed
+                        && !item.artwork_pending && !item.source_changed));
+                this.beetsReviewError = '';
+            } catch (error) {
+                this.beetsReviewItems = [];
+                this.beetsReviewError = 'Nie udało się wczytać listy. Odśwież stan, aby spróbować ponownie.';
+            } finally {
+                this.fetchingBeetsReview = false;
+            }
+        },
+
+        async importBeets(retry = false, reviewId = null) {
+            if (!this.canImportBeets) return;
+            if (reviewId !== null && !this.beetsReviewItems.some(item => item.id === reviewId)) return;
+            this.importingBeets = true;
+            this.retryingBeetsReviewId = reviewId;
+            this.beetsImportError = '';
+            this.statusMsg = '';
+            this.statusError = false;
+            try {
+                const url = reviewId === null ? '/api/beets/import'
+                    : `/api/beets/review/${encodeURIComponent(reviewId)}/retry`;
+                const payload = { navi_sync: this.naviSync, navi_account_id: this.selectedNaviAccount };
+                if (reviewId === null) payload.retry = retry;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok || !data.task_id) {
+                    throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się rozpocząć importu.');
+                }
+                this.statusMsg = data.message || 'Rozpoczęto import nowych plików.';
+                this.connectLogs(data.task_id);
+                this.fetchJobs();
+                this.fetchBeetsStatus();
+            } catch (error) {
+                this.statusError = true;
+                this.statusMsg = error instanceof TypeError ? 'Nie udało się połączyć z serwerem. Spróbuj ponownie.'
+                    : (error.message || 'Błąd komunikacji z serwerem.');
+                this.beetsImportError = this.statusMsg;
+                this.fetchBeetsStatus();
+            } finally {
+                this.importingBeets = false;
+                this.retryingBeetsReviewId = null;
             }
         },
 
@@ -517,6 +1214,7 @@ function appData() {
         },
 
         async organizeSlskd() {
+            if (this.importingBeets || this.organizingSlskd) return;
             if (!this.slskdAccount || !this.slskdAccount.configured) {
                 this.statusMsg = 'Brak konfiguracji w slskd_accounts.txt.';
                 this.statusError = true;
@@ -543,20 +1241,21 @@ function appData() {
                 if (response.ok && data.task_id) {
                     this.statusMsg = data.message;
                     this.connectLogs(data.task_id);
+                    this.fetchJobs();
                 } else {
                     this.statusError = true;
                     this.statusMsg = data.detail || 'Wystąpił błąd przy zlecaniu porządkowania.';
-                    this.organizingSlskd = false;
                 }
             } catch (error) {
                 this.statusError = true;
                 this.statusMsg = 'Błąd komunikacji z serwerem.';
+            } finally {
                 this.organizingSlskd = false;
             }
         },
         
         async startDownload() {
-            if (!this.url) return;
+            if (!this.url.trim() || this.loading || this.importingBeets) return;
             
             this.loading = true;
             this.statusMsg = '';
@@ -586,18 +1285,19 @@ function appData() {
                     
                     // Connect to SSE logs for this task
                     this.connectLogs(data.task_id);
+                    this.fetchJobs();
                     
                 } else {
                     this.statusError = true;
                     this.statusMsg = data.detail || 'Wystąpił błąd przy zlecaniu pobierania.';
-                    this.loading = false;
                     this.fetchErrors();
                 }
             } catch (error) {
                 this.statusError = true;
                 this.statusMsg = 'Błąd komunikacji z serwerem.';
-                this.loading = false;
                 this.fetchErrors();
+            } finally {
+                this.loading = false;
             }
         },
 

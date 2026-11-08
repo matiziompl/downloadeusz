@@ -1,12 +1,15 @@
 import os
 import re
 import json
+import logging
 import shutil
 import urllib.request
 import urllib.parse
 import urllib.error
 from typing import Dict, List, Any, Optional, Callable
 import mutagen
+
+AUDIO_EXTENSIONS = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".alac", ".aiff", ".ape", ".wv"}
 
 def sanitize_filename(name: str) -> str:
     """Sanitize string to be safe for filenames across Linux, macOS, and Windows."""
@@ -91,34 +94,35 @@ def build_target_path(tags: Dict[str, str], ext: str, base_dir: str) -> str:
     filename = f"{track} {title}.{clean_ext}"
     return os.path.join(base_dir, artist, folder, filename)
 
-def find_file_in_dir(search_path: str, base_dir: str) -> Optional[str]:
-    """Find file in base_dir by normalized path or basename, strictly preventing directory traversal."""
-    base_abs = os.path.abspath(base_dir)
-    # Normalize slashes and prevent directory traversal
-    norm_rel = os.path.normpath(search_path.replace('\\', '/')).lstrip('/\\')
-    
-    # Check direct candidate inside base_dir
-    candidate = os.path.abspath(os.path.join(base_abs, norm_rel))
-    if candidate.startswith(base_abs + os.sep) and os.path.isfile(candidate):
-        return candidate
+def find_file_in_dir(search_path: str, base_dir: str, allow_basename: bool = True) -> Optional[str]:
+    """Resolve a remote path without following symlinks or guessing ambiguous filenames."""
+    base_abs = os.path.realpath(base_dir)
+    parts = [p for p in search_path.replace('\\', '/').split('/') if p and p != '.']
+    if not parts or '..' in parts:
+        return None
 
-    # Try removing the top directory (e.g. username directory)
-    parts = [p for p in norm_rel.split(os.sep) if p and p != '..']
-    if len(parts) > 1:
-        sub_candidate = os.path.abspath(os.path.join(base_abs, *parts[1:]))
-        if sub_candidate.startswith(base_abs + os.sep) and os.path.isfile(sub_candidate):
-            return sub_candidate
+    def safe_file(path):
+        return (path.startswith(base_abs + os.sep) and os.path.realpath(path) == path
+                and os.path.isfile(path))
 
-    # Fallback: search for filename recursively strictly within base_dir
-    target_basename = os.path.basename(norm_rel)
-    if target_basename and target_basename != '..':
-        for root, _, files in os.walk(base_abs):
-            if target_basename in files:
-                found = os.path.join(root, target_basename)
-                if found.startswith(base_abs + os.sep):
-                    return found
+    for offset in range(max(1, len(parts) - 1)):
+        candidate = os.path.join(base_abs, *parts[offset:])
+        if safe_file(candidate):
+            return candidate
 
-    return None
+    if not allow_basename:
+        return None
+
+    matches = []
+    for root, dirs, files in os.walk(base_abs):
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
+        if parts[-1] in files:
+            candidate = os.path.join(root, parts[-1])
+            if safe_file(candidate):
+                matches.append(candidate)
+                if len(matches) > 1:
+                    return None
+    return matches[0] if matches else None
 
 def clean_empty_directories(directory: str):
     """Remove empty folders left behind in directory tree."""
@@ -174,6 +178,107 @@ def get_slskd_auth_header(
 
     return {}
 
+
+def fetch_slskd_transfer_files(slskd_url: str, slskd_username: str = "",
+                              slskd_password: str = "", slskd_api_key: str = "") -> List[dict]:
+    if not slskd_url.startswith(('http://', 'https://')):
+        slskd_url = f"http://{slskd_url}"
+    headers = get_slskd_auth_header(slskd_url, username=slskd_username,
+                                  password=slskd_password, api_key=slskd_api_key, timeout=15)
+    request = urllib.request.Request(f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads", headers=headers)
+    with urllib.request.urlopen(request, timeout=15) as response:
+        data = json.loads(response.read().decode('utf-8'))
+    files = []
+
+    def extract(node, username=""):
+        if isinstance(node, list):
+            for value in node:
+                extract(value, username)
+        elif isinstance(node, dict):
+            username = node.get("username") or username
+            if isinstance(node.get("filename"), str) and "state" in node:
+                files.append({**node, **({"username": username} if username else {})})
+            for value in node.values():
+                if isinstance(value, (list, dict)):
+                    extract(value, username)
+
+    extract(data)
+    return files
+
+
+def transfer_succeeded(transfer: dict) -> bool:
+    state = str(transfer.get("state", "")).lower().strip()
+    return state == "completed" or {part.strip() for part in state.split(',')} == {"completed", "succeeded"}
+
+
+def get_completed_album_directories(slskd_url: str, source_dir: str,
+                                    slskd_username: str = "", slskd_password: str = "",
+                                    slskd_api_key: str = "", log_callback=None) -> List[str]:
+    """Only offer complete local albums to beets, including all discs together."""
+    transfers = fetch_slskd_transfer_files(slskd_url=slskd_url, slskd_username=slskd_username,
+                                         slskd_password=slskd_password, slskd_api_key=slskd_api_key)
+    completed = set()
+    blocked_remote_dirs = set()
+    remote_dirs = {}
+    missing = []
+    for transfer in transfers:
+        remote = transfer["filename"].replace('\\', '/')
+        remote_dir = remote.rpartition('/')[0]
+        owner = transfer.get("username", "")
+        if not transfer_succeeded(transfer):
+            blocked_remote_dirs.add((owner, remote_dir))
+            continue
+        local = find_file_in_dir(remote, source_dir, allow_basename=False)
+        if local and os.path.splitext(local)[1].lower() in AUDIO_EXTENSIONS:
+            completed.add(local)
+            remote_dirs[local] = (owner, remote_dir)
+        elif os.path.splitext(remote)[1].lower() in AUDIO_EXTENSIONS:
+            missing.append(remote)
+
+    if missing:
+        message = (f"[Soulseek] Brak {len(missing)} ukończonych plików w {source_dir}. "
+                   "Sprawdź SLSKD_DOWNLOADS_DIR i wspólny wolumen downloads slskd. "
+                   f"Przykład: {missing[0]}")
+        if log_callback:
+            log_callback(message)
+        else:
+            logging.getLogger(__name__).warning(message)
+
+    albums = set()
+    for path in completed:
+        directory = os.path.dirname(path)
+        if re.fullmatch(r'(?:cd|disc|disk)[\s._-]*\d+', os.path.basename(directory), re.IGNORECASE):
+            parent = os.path.dirname(directory)
+            if parent != os.path.realpath(source_dir):
+                directory = parent
+        albums.add(directory)
+
+    ready = []
+    for album in sorted(albums):
+        audio = set()
+        unsafe = False
+        for root, dirs, files in os.walk(album):
+            if any(os.path.islink(os.path.join(root, name)) for name in dirs + files):
+                unsafe = True
+                break
+            audio.update(os.path.join(root, name) for name in files
+                         if os.path.splitext(name)[1].lower() in AUDIO_EXTENSIONS)
+        remote_album_dirs = set()
+        for path in audio & completed:
+            owner, remote_dir = remote_dirs[path]
+            if os.path.dirname(path) != album:
+                depth = len(os.path.relpath(os.path.dirname(path), album).split(os.sep))
+                for _ in range(depth):
+                    remote_dir = remote_dir.rpartition('/')[0]
+            remote_album_dirs.add((owner, remote_dir))
+        blocked = any(blocked_owner == owner and (blocked_dir == remote_dir or blocked_dir.startswith(remote_dir + '/'))
+                      for blocked_owner, blocked_dir in blocked_remote_dirs for owner, remote_dir in remote_album_dirs)
+        if not unsafe and audio and audio <= completed and not blocked:
+            ready.append(album)
+        elif log_callback:
+            log_callback(f"[beets] Album czeka na zakończenie wszystkich transferów: {os.path.basename(album)}")
+    return ready
+
 def organize_slskd_downloads(
     slskd_url: str,
     slskd_api_key: str = "",
@@ -194,56 +299,15 @@ def organize_slskd_downloads(
         log(f"[Soulseek] Błąd: Folder źródłowy nie istnieje: {source_dir}")
         return stats
 
-    if not slskd_url.startswith(('http://', 'https://')):
-        slskd_url = f"http://{slskd_url}"
-
-    # 1. Authenticate and prepare headers
     try:
-        headers = get_slskd_auth_header(
-            slskd_url,
-            username=slskd_username,
-            password=slskd_password,
-            api_key=slskd_api_key,
-            timeout=15
-        )
+        files = fetch_slskd_transfer_files(slskd_url, slskd_username, slskd_password, slskd_api_key)
     except Exception as e:
-        err_msg = f"Błąd autoryzacji Soulseek (slskd): {e}"
+        err_msg = f"Nie udało się pobrać transferów slskd: {e}"
         log(f"[Soulseek] {err_msg}")
         stats["errors"].append(err_msg)
         return stats
 
-    # 2. Fetch completed transfers from slskd
-    api_url = f"{slskd_url.rstrip('/')}/api/v0/transfers/downloads"
-    log(f"[Soulseek] Pobieranie listy transferów z {api_url}...")
-    try:
-        req = urllib.request.Request(api_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
-        err_msg = f"Nie udało się połączyć z API slskd: {e}"
-        log(f"[Soulseek] {err_msg}")
-        stats["errors"].append(err_msg)
-        return stats
-
-    # Extract all completed files from response
-    completed_files = []
-
-    def extract_files(node):
-        if isinstance(node, list):
-            for item in node:
-                extract_files(item)
-        elif isinstance(node, dict):
-            # Check if this node is a file object
-            if "filename" in node and "state" in node:
-                state_str = str(node.get("state", ""))
-                if "Completed, Succeeded" in state_str or state_str.lower() == "completed":
-                    completed_files.append(node["filename"])
-            # Recurse into directories or lists
-            for key, val in node.items():
-                if isinstance(val, (list, dict)):
-                    extract_files(val)
-
-    extract_files(data)
+    completed_files = [file["filename"] for file in files if transfer_succeeded(file)]
     log(f"[Soulseek] Znaleziono {len(completed_files)} ukończonych plików w slskd.")
 
     if not completed_files:
@@ -251,14 +315,14 @@ def organize_slskd_downloads(
         return stats
 
     for rel_path in completed_files:
-        src_file = find_file_in_dir(rel_path, source_dir)
+        src_file = find_file_in_dir(rel_path, source_dir, allow_basename=False)
         if not src_file:
             log(f"[Soulseek] Pominięto (brak pliku na dysku): {rel_path}")
             stats["skipped"] += 1
             continue
 
         ext = os.path.splitext(src_file)[1].lower()
-        if ext not in [".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".alac", ".aiff"]:
+        if ext not in AUDIO_EXTENSIONS:
             log(f"[Soulseek] Pominięto (nieobsługiwany format): {os.path.basename(src_file)}")
             stats["skipped"] += 1
             continue

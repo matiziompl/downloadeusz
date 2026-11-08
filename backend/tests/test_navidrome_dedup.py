@@ -134,7 +134,7 @@ def test_filter_existing_songs_flac_only():
     # 1: One More Time -> FLAC (should skip)
     # 2: Aerodynamic -> MP3 (should NOT skip under flac_only)
     # 3: Digital Love -> Not found (should NOT skip)
-    def fake_search(navi_url, navi_user, navi_pass, artist, title):
+    def fake_search(navi_url, navi_user, navi_pass, artist, title, **kwargs):
         if "One More Time" in title:
             return {"title": "One More Time", "artist": "Daft Punk", "suffix": "flac"}
         elif "Aerodynamic" in title:
@@ -163,7 +163,7 @@ def test_filter_existing_songs_all():
         {"name": "Aerodynamic", "artists": ["Daft Punk"], "url": "http://sp/2"},
     ]
 
-    def fake_search(navi_url, navi_user, navi_pass, artist, title):
+    def fake_search(navi_url, navi_user, navi_pass, artist, title, **kwargs):
         if "One More Time" in title:
             return {"title": "One More Time", "artist": "Daft Punk", "suffix": "flac"}
         elif "Aerodynamic" in title:
