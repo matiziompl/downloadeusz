@@ -61,7 +61,7 @@ def usable_album(value):
         "", "unknown", "unknown album", "nieznany album", "n a", "none", "null"}
 
 
-def album_fallback_from_tags(path):
+def album_fallback_details(path):
     """Recognize Normalizeusz's portable marker only for its original album."""
     import mutagen
 
@@ -73,18 +73,21 @@ def album_fallback_from_tags(path):
     try:
         source = Path(path).absolute()
         if any(part.is_symlink() for part in (source, *source.parents)) or source.stat().st_nlink != 1:
-            return False
+            return {}
         audio = mutagen.File(source)
         tags = audio.tags if audio else None
         if not tags:
-            return False
+            return {}
         marker = first(tags.get("downloadeusz_album_fallback") or tags.get("TXXX:DOWNLOADEUSZ_ALBUM_FALLBACK")
                        or tags.get("----:com.apple.iTunes:DOWNLOADEUSZ_ALBUM_FALLBACK"))
         album = first(tags.get("album") or tags.get("TALB") or tags.get("\xa9alb"))
         if not isinstance(marker, str) or len(marker) > 65536:
-            return False
+            return {}
         marker = json.loads(marker)
-        return bool(isinstance(marker, dict) and marker.get("version") == 1 and album
-                    and marker.get("album") == album)
+        return marker if isinstance(marker, dict) and marker.get('version') == 1 and album and marker.get('album') == album else {}
     except (OSError, ValueError, mutagen.MutagenError):
-        return False
+        return {}
+
+
+def album_fallback_from_tags(path):
+    return bool(album_fallback_details(path))

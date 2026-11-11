@@ -55,6 +55,8 @@ def finalize(store, job, *, library_dir, normalization_dir=None, navi_call=None,
                 store.update(identity, result=progress)
                 raise RuntimeError(response.get("error") or "Normalizacja nie powiodła się")
             progress["normalized"] = True
+            # The browser may enable normalization after a scan has already started.
+            progress.pop("scan_started", None)
         else:
             pending = queue / "pending"
             pending.mkdir(exist_ok=True)

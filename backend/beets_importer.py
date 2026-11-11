@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -89,6 +90,19 @@ def _write_json(path: Path, value: dict) -> None:
     temp.replace(path)
 
 
+def _copy_database(source, destination):
+    """SQLite backup includes committed WAL data without copying a live database file."""
+    reader = sqlite3.connect(str(source))
+    try:
+        writer = sqlite3.connect(str(destination))
+        try:
+            reader.backup(writer)
+        finally:
+            writer.close()
+    finally:
+        reader.close()
+
+
 def _load_library_state(config_dir):
     path = Path(config_dir) / "beets" / "library-state.json"
     if not path.exists():
@@ -109,9 +123,23 @@ def _load_library_state(config_dir):
 
 def list_review(config_dir) -> list[dict]:
     """Read exceptions without changing files or contacting metadata services."""
-    return [entry for entry in _load_library_state(config_dir)["tracks"].values()
-            if entry.get("status") == "needs_review" or not entry.get("metadata_confirmed")
-            or not entry.get("release_confirmed") or entry.get("artwork_pending") or entry.get("source_changed")]
+    return [{**entry, "candidates": [{key: value for key, value in candidate.items() if not key.startswith("_")}
+                                     for candidate in entry.get("candidates", [])]}
+            for entry in _load_library_state(config_dir)["tracks"].values()
+            if not entry.get("trashed") and (entry.get("source_changed") or (not entry.get("manual_album_accepted") and (entry.get("status") == "needs_review" or not entry.get("metadata_confirmed")
+            or not entry.get("release_confirmed") or entry.get("artwork_pending"))))]
+
+
+def _find_selection(entry, candidate_key):
+    for candidate in entry.get("candidates", []):
+        if candidate.get("selection_key") == candidate_key and candidate.get("_track", {}).get("track_id"):
+            return candidate
+    raise ValueError("Propozycja jest nieaktualna lub nie ma pełnych danych. Odśwież listę i sprawdź ponownie")
+
+
+def find_selection(config_dir, item_id, candidate_key):
+    entry = _load_library_state(config_dir)["tracks"].get(item_id, {})
+    return _find_selection(entry, candidate_key)
 
 
 def _track_id(source):
@@ -140,6 +168,7 @@ def _save_track(state, state_path, source, record, dest, *, audio_signature=None
         "metadata_confirmed": previous.get("metadata_confirmed", False),
         "release_confirmed": previous.get("release_confirmed", False),
         "album_source": previous.get("album_source", ""),
+        "manual_album_accepted": previous.get("manual_album_accepted", False),
         "artwork_pending": previous.get("artwork_pending", False),
         "source_changed": previous.get("source_changed", False),
         "source_fingerprint": previous.get("source_fingerprint", ""),
@@ -149,7 +178,9 @@ def _save_track(state, state_path, source, record, dest, *, audio_signature=None
         "candidates": (record.get("candidates") or previous.get("candidates", []))[:3],
         "last_attempt": now, "next_attempt": now + ENRICH_INTERVAL,
     }
-    if source.is_file() and not entry["source_fingerprint"] and not previous.get("imported"):
+    if previous.get("trashed"):
+        entry["trashed"] = previous["trashed"]
+    if source.is_file() and not previous.get("imported"):
         entry["source_fingerprint"] = _fingerprint([source])
     if record.get("event") == "imported":
         destination = _library_file(record["destination"], dest)
@@ -322,7 +353,7 @@ def _attempt_import(base, path, review_path, environment, dest, log, *, on_recor
 
 def import_paths(
     paths: list[str], *, source_dir: str, dest_dir: str, config_dir: str,
-    log_callback=None, retry: bool = False,
+    log_callback=None, retry: bool = False, candidate_key=None,
 ) -> dict:
     """Import completed inputs once per fingerprint; uncertain matches stay at source."""
     result = {"organized": 0, "skipped": 0, "errors": []}
@@ -429,6 +460,24 @@ def import_paths(
                                 imported.add(saved["destination"])
 
                     try:
+                        if candidate_key:
+                            if len(files) != 1:
+                                raise ValueError("Ręczny wybór dotyczy jednego pliku")
+                            known = library_state["tracks"].get(_track_id(files[0]), {})
+                            selection = _find_selection(known, candidate_key)
+                            if known.get("source_fingerprint") != _fingerprint(files):
+                                raise ValueError("Plik źródłowy zmienił się od rozpoznania; sprawdź ponownie")
+                            manual_settings = {**settings, "plugins": ["downloadeusz", "fetchart", "embedart"]}
+                            manual_path = state_dir / "managed-selection.yaml"
+                            _write_json(manual_path, manual_settings)
+                            manual_base = [executable, "-c", str(manual_path), "-l", str(state_dir / "library.db"), "-d", str(dest)]
+                            manual_env = {**environment, "DOWNLOADEUSZ_BEETS_SELECTION": json.dumps(selection)}
+                            _preflight(manual_base, manual_env)
+                            imported, decision = _attempt_import(manual_base, files[0], review_path, manual_env, dest, log,
+                                                                 on_record=record_track)
+                            if not imported:
+                                raise RuntimeError("Nie zastosowano wybranej propozycji (np. duplikat w bibliotece)")
+                            continue
                         if not checked_plugins:
                             _preflight(base, environment)
                             checked_plugins = True
@@ -502,7 +551,7 @@ def import_paths(
                             log(f"Nie rozpoznano pewnie {path.name}; oryginały czekają na sprawdzenie")
                     except subprocess.TimeoutExpired:
                         error(f"Przekroczono limit czasu importu {path.name}; pliki źródłowe pozostały na miejscu")
-                    except (OSError, RuntimeError) as exc:
+                    except (OSError, ValueError, RuntimeError) as exc:
                         error(f"Błąd importu {path.name}: {exc}")
                     finally:
                         result["organized"] += len(imported)
@@ -513,7 +562,7 @@ def import_paths(
 
 
 def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: bool = False,
-                   item_id=None, ready_sources=None) -> dict:
+                   item_id=None, ready_sources=None, candidate_key=None) -> dict:
     """Enrich tracked library copies in place; missing originals do not block updates."""
     result = {"organized": 0, "skipped": 0, "errors": [], "updated": 0}
 
@@ -525,10 +574,16 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
         state = _load_library_state(config_dir)
         if item_id is not None and item_id not in state["tracks"]:
             raise ValueError("Nie znaleziono zapisanego zadania do wzbogacenia")
+        if candidate_key:
+            if not item_id:
+                raise ValueError("Ręczny wybór wymaga wskazania utworu")
+            _find_selection(state["tracks"][item_id], candidate_key)
         now = time.time()
         pending = [entry for entry in state["tracks"].values()
                    if (item_id is None or entry["id"] == item_id)
-                   and (not entry.get("metadata_confirmed") or not entry.get("release_confirmed") or entry.get("artwork_pending") or entry.get("source_changed"))
+                   and not entry.get("trashed")
+                   and (candidate_key or not entry.get("manual_album_accepted"))
+                   and (candidate_key or not entry.get("metadata_confirmed") or not entry.get("release_confirmed") or entry.get("artwork_pending") or entry.get("source_changed"))
                    and (retry or not entry.get("next_attempt") or entry["next_attempt"] <= now)]
         if not pending:
             return result
@@ -539,7 +594,8 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
             source = Path(entry["source"])
             if not entry.get("imported") and source.is_file() and source.resolve() in eligible_sources:
                 imported = import_paths([str(source)], source_dir=str(source.parent), dest_dir=dest_dir,
-                                        config_dir=config_dir, log_callback=log_callback, retry=True)
+                                        config_dir=config_dir, log_callback=log_callback, retry=True,
+                                        **({"candidate_key": candidate_key} if candidate_key else {}))
                 for key in ("organized", "skipped"):
                     result[key] += imported[key]
                 result["errors"].extend(imported["errors"])
@@ -575,10 +631,15 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                             result["skipped"] += 1
                         continue
                     entry = state["tracks"][old_entry["id"]]
+                    if entry.get("trashed"):
+                        result["skipped"] += 1
+                        continue
                     updated = False
                     backup = None
+                    database_backup = None
                     records = []
                     try:
+                        selection = _find_selection(entry, candidate_key) if candidate_key else None
                         destination = _library_file(entry["destination"], dest)
                         current_signature = audio_packet_signature(destination)
                         trusted_signature = entry.get("destination_audio_signature")
@@ -605,6 +666,16 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                             backup_candidate.unlink(missing_ok=True)
                             raise
                         backup = backup_candidate
+                        if selection and (state_dir / "library.db").is_file():
+                            descriptor, database_name = tempfile.mkstemp(prefix=".downloadeusz-selection-db-", suffix=".bak", dir=state_dir)
+                            os.close(descriptor)
+                            database_candidate = Path(database_name)
+                            try:
+                                _copy_database(state_dir / "library.db", database_candidate)
+                            except (OSError, sqlite3.Error):
+                                database_candidate.unlink(missing_ok=True)
+                                raise
+                            database_backup = database_candidate
 
                         def update_record(record):
                             if str(Path(record.get("source", "")).resolve()) != str(destination.resolve()):
@@ -623,15 +694,23 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                         entry_environment = {**environment,
                                              "DOWNLOADEUSZ_BEETS_ALBUM_SOURCE": entry.get("album_source", ""),
                                              "DOWNLOADEUSZ_BEETS_ALLOW_FALLBACK": "1" if retry else "0"}
+                        entry_base = base
+                        if selection:
+                            manual_path = state_dir / "managed-enrich-selection.yaml"
+                            _write_json(manual_path, {**settings, "plugins": ["downloadeusz", "fetchart", "embedart"]})
+                            entry_base = [executable, "-c", str(manual_path), "-l", str(state_dir / "library.db"), "-d", str(dest)]
+                            entry_environment["DOWNLOADEUSZ_BEETS_SELECTION"] = json.dumps(selection)
                         decision = "finished"
-                        if not entry.get("metadata_confirmed") or not entry.get("release_confirmed"):
+                        if selection or not entry.get("metadata_confirmed") or not entry.get("release_confirmed"):
                             if not checked_plugins:
-                                _preflight(base, environment)
+                                _preflight(entry_base, entry_environment)
                                 checked_plugins = True
-                            _, decision = _attempt_import(base, destination, review_path, entry_environment, dest, log,
+                            _, decision = _attempt_import(entry_base, destination, review_path, entry_environment, dest, log,
                                                           on_record=update_record, in_place=True)
                             commit_records()
-                        if not updated and decision == "unmatched" and shutil.which("fpcalc"):
+                        if selection and not updated:
+                            raise RuntimeError("Nie zastosowano wybranej propozycji (np. duplikat w bibliotece)")
+                        if not selection and not updated and decision == "unmatched" and shutil.which("fpcalc"):
                             fingerprint_config = state_dir / "managed-enrich-fingerprint.yaml"
                             fingerprint_settings = {
                                 **settings, "plugins": settings["plugins"] + ["chroma"], "chroma": {"auto": True},
@@ -658,7 +737,7 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                             _save_track(state, state_path, entry["source"],
                                         {"event": "review", "reason": state["tracks"][entry["id"]].get("reason") or "Brak nowego pewnego rozpoznania"}, dest)
                             result["skipped"] += 1
-                    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
+                    except (OSError, ValueError, RuntimeError, sqlite3.Error, subprocess.TimeoutExpired) as exc:
                         reason = next((record.get("reason") for record in reversed(records) if record.get("reason")), str(exc))
                         if backup is not None:
                             try:
@@ -667,6 +746,12 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                             except OSError as restore_error:
                                 reason += f"; nie udało się przywrócić kopii ({backup}): {restore_error}"
                                 backup = None
+                        if database_backup is not None:
+                            try:
+                                _copy_database(database_backup, state_dir / "library.db")
+                            except (OSError, sqlite3.Error) as restore_error:
+                                reason += f"; nie udało się przywrócić bazy beets ({database_backup}): {restore_error}"
+                                database_backup = None
                         updated = False
                         state["tracks"][entry["id"]] = entry
                         result["errors"].append(reason)
@@ -677,6 +762,8 @@ def enrich_pending(*, config_dir: str, dest_dir: str, log_callback=None, retry: 
                             result["updated"] += 1
                         if backup is not None:
                             backup.unlink(missing_ok=True)
+                        if database_backup is not None:
+                            database_backup.unlink(missing_ok=True)
     except (OSError, ValueError, RuntimeError) as exc:
         result["errors"].append(str(exc))
         log(str(exc))

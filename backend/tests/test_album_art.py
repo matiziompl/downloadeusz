@@ -79,3 +79,17 @@ def test_write_failure_is_not_silently_reported_as_success(track):
          patch.object(MediaFile, "save", side_effect=RuntimeError("storage failure")):
         with pytest.raises(OSError, match="storage failure"):
             album_art.enrich_artwork(track)
+
+
+def test_explicit_replacement_preserves_existing_cover_on_network_failure(track):
+    from mediafile import MediaFile, Image as EmbeddedImage
+    old = cover()
+    media = MediaFile(track); media.images = [EmbeddedImage(old)]; media.save()
+    before = track.read_bytes()
+    with patch("urllib.request.urlopen", side_effect=OSError("offline")):
+        assert not album_art.enrich_artwork(track, replace=True)
+    assert track.read_bytes() == before
+    new = io.BytesIO(); Image.new("RGB", (20, 20), "red").save(new, format="JPEG")
+    with patch("urllib.request.urlopen", return_value=io.BytesIO(new.getvalue())):
+        assert album_art.enrich_artwork(track, replace=True)
+    assert MediaFile(track).images[0].data == new.getvalue()

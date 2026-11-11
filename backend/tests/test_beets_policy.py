@@ -84,6 +84,17 @@ def test_candidates_are_bounded_and_serializable():
                              "album": "Album", "year": 2024, "length": 180.0, "distance": 0.12}
 
 
+def test_real_candidates_keep_metadata_snapshot_for_manual_selection():
+    source = recording()
+    source.pop("track_id")
+    task = task_for(source, [recording()])
+    proposal = policy.candidate_summaries(task.candidates, task.item)[0]
+    assert proposal["kind"] == "recording"
+    assert len(proposal["selection_key"]) == 64
+    assert proposal["_track"]["track_id"] == "recording-a"
+    assert json.loads(json.dumps(proposal)) == proposal
+
+
 def plugin():
     from backend.beetsplug.downloadeusz import DownloadeuszPlugin
     return DownloadeuszPlugin()
@@ -160,3 +171,38 @@ def test_in_place_guard_accepts_actual_library_file_but_rejects_hardlink(tmp_pat
     finally:
         config["import"]["copy"].set(old_copy)
         config["import"]["move"].set(old_move)
+
+
+def test_failed_copied_tag_write_restores_database_identity_too(tmp_path):
+    from beets import config
+    from beets.autotag.distance import Distance
+    from beets.autotag.hooks import TrackInfo
+    from beets.autotag.match import TrackMatch
+    from beets.exceptions import UserError
+    from beets.importer import SingletonImportTask
+    from beets.library import Item, Library
+    from backend.tests.test_hybrid_importer import audio_file
+
+    source = audio_file(tmp_path / "incoming" / "song.wav", tagged=False)
+    root = tmp_path / "music"
+    root.mkdir()
+    destination = root / "song.wav"
+    destination.write_bytes(b"partial metadata write")
+    lib = Library(str(tmp_path / "library.db"), directory=os.fsencode(root))
+    item = Item(path=os.fsencode(destination), artist="Chosen Artist", title="Chosen Song", mb_trackid="chosen-id")
+    lib.add(item)
+    task = SingletonImportTask(None, item)
+    task.set_choice(TrackMatch(Distance(), TrackInfo(title="Chosen Song", track_id="chosen-id"), item))
+    helper = plugin()
+    helper.sources[item.id] = str(source)
+    helper.originals[str(source)] = {"album_source": ""}
+    old_copy = config["import"]["copy"].get()
+    try:
+        config["import"]["copy"].set(True)
+        with pytest.raises(UserError):
+            helper.imported_files(SimpleNamespace(lib=lib, config=config["import"]), task)
+        item.load()
+        assert (item.artist, item.title, item.mb_trackid) == ("", "", "")
+        assert destination.read_bytes() == source.read_bytes()
+    finally:
+        config["import"]["copy"].set(old_copy)

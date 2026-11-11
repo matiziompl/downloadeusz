@@ -14,17 +14,17 @@ from PIL import Image
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
-def _pending(path):
+def _pending(path, replace=False):
     path = Path(path).absolute()
     if (not path.is_file() or any(part.is_symlink() for part in [path, *path.parents])
             or path.stat().st_nlink > 1):
         return None
     media = MediaFile(path)
-    if media.images:
+    if media.images and not replace:
         return None
     for extension in (".jpg", ".jpeg", ".png", ".webp"):
         local = path.parent / ("cover" + extension)
-        if local.is_file() and not local.is_symlink():
+        if local.is_file() and not local.is_symlink() and not replace:
             return None
     release = str(media.mb_albumid or "")
     if str(UUID(release)) != release.casefold():
@@ -39,10 +39,10 @@ def artwork_pending(path) -> bool:
         return False
 
 
-def enrich_artwork(path, log_callback=None) -> bool:
+def enrich_artwork(path, log_callback=None, *, replace=False) -> bool:
     """Embed available art; the caller backs up the tracked copy before writes."""
     try:
-        pending = _pending(path)
+        pending = _pending(path, replace=replace)
     except (OSError, ValueError, MediaFileError):
         return False
     if pending is None:

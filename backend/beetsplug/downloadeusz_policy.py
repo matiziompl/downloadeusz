@@ -1,6 +1,8 @@
 """Recording identity checks independent of a particular album edition."""
 
 import math
+import hashlib
+import json
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -91,14 +93,33 @@ def release_agrees(source, candidate):
                 and source_year and candidate_year and str(source_year) == str(candidate_year))
 
 
-def candidate_summaries(candidates):
+def candidate_summaries(candidates, item=None):
     summaries = []
     for candidate in list(candidates or [])[:3]:
-        info = candidate.info
-        summaries.append({"id": str(field(info, "track_id") or field(info, "album_id")),
+        album = candidate.info if hasattr(candidate, "mapping") else None
+        info = candidate.mapping.get(item) if album is not None else candidate.info
+        if info is None:
+            continue
+        summary = {"id": str(field(album, "album_id") if album is not None else field(info, "track_id")),
                           "artist": str(field(info, "artist")),
                           "title": str(field(info, "title") or field(info, "album")),
-                          "album": str(field(info, "album")),
-                          "year": field(info, "year", 0), "length": field(info, "length", 0),
-                          "distance": round(float(candidate.distance), 6)})
+                          "album": str(field(album if album is not None else info, "album")),
+                          "year": field(album if album is not None else info, "year", 0),
+                          "length": field(info, "length", 0),
+                          "distance": round(float(candidate.distance), 6)}
+        # Persist provider metadata, not just its label: a later lookup can return different proposals.
+        if isinstance(info, Mapping) and field(info, "track_id"):
+            summary.update(kind="release" if album is not None else "recording", _track=dict(info),
+                           track=field(info, "medium_index") or field(info, "index", 0),
+                           disc=field(info, "medium", 0))
+            details = album if album is not None else info
+            for name in ("country", "media", "label", "catalognum"):
+                summary[name] = field(details, name)
+            summary["disambiguation"] = field(details, "albumdisambig") or field(details, "disambiguation")
+            if album is not None:
+                summary["_album"] = {key: value for key, value in album.items() if key != "tracks"}
+                summary["_album_track_count"] = len(album.tracks)
+            snapshot = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+            summary["selection_key"] = hashlib.sha256(snapshot.encode()).hexdigest()
+        summaries.append(summary)
     return summaries

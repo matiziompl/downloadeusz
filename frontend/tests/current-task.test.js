@@ -81,6 +81,7 @@ test('null and failed queue responses clear the automatic card', async () => {
 test('details action selects the worker job and keeps automatic tracking separate', async () => {
     const { app } = createApp();
     app.currentJob = { id: 'worker' };
+    app.queueOpen = true;
     let selected;
     const calls = [];
     app.selectJob = async id => { selected = id; };
@@ -91,13 +92,15 @@ test('details action selects the worker job and keeps automatic tracking separat
     assert.deepEqual(calls, ['scroll', 'focus']);
 });
 
-test('card is between the form and queue and renders search values as text', () => {
+test('current task lives inside queue popup before history and renders search values as text', () => {
     const html = readFileSync(join(__dirname, '../index.html'), 'utf8');
-    const cardStart = html.indexOf('aria-labelledby="current-task-heading"');
-    const queueStart = html.indexOf('aria-labelledby="queue-heading"');
-    assert.ok(cardStart > html.indexOf('@click="startDownload()"'));
+    const dialog = html.match(/<dialog id="queue-dialog"[\s\S]*?<\/dialog>/)?.[0] || '';
+    assert.ok(dialog);
+    const cardStart = dialog.indexOf('aria-labelledby="current-task-heading"');
+    const queueStart = dialog.indexOf('aria-labelledby="queue-heading"');
+    assert.ok(cardStart >= 0);
     assert.ok(cardStart < queueStart);
-    const card = html.slice(cardStart, queueStart);
+    const card = dialog.slice(cardStart, queueStart);
     assert.match(card, /x-show="currentJob"/);
     assert.match(card, /x-text="currentTaskSearch\?\.query/);
     assert.doesNotMatch(card, /x-html/);

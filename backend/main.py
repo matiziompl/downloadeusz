@@ -11,17 +11,19 @@ import glob
 import re
 import shutil
 import threading
+import sqlite3
 import fcntl
 from pathlib import Path
 from contextlib import asynccontextmanager, contextmanager
 from typing import Literal
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import JSONResponse, StreamingResponse, Response
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 try:
     from backend import navidrome_dedup, slskd_organizer, accounts, spotify_meta, beets_importer, job_store, pipeline, documentation, normalizer_bridge
+    from backend.music_library import MusicLibrary
 except ImportError:
     import navidrome_dedup
     import slskd_organizer
@@ -32,6 +34,7 @@ except ImportError:
     import pipeline
     import documentation
     import normalizer_bridge
+    from music_library import MusicLibrary
 
 
 @asynccontextmanager
@@ -53,7 +56,7 @@ async def lifespan(app):
         await worker
 
 
-APP_VERSION = "2.13"
+APP_VERSION = "2.27"
 app = FastAPI(lifespan=lifespan, version=APP_VERSION)
 
 # Configuration
@@ -131,6 +134,146 @@ def get_job_store():
     return job_store.JobStore(Path(SPOTDL_CONFIG_DIR) / "jobs.sqlite3")
 
 
+def get_music_library():
+    return MusicLibrary(SPOTDL_CONFIG_DIR, DOWNLOADS_DIR)
+
+
+def get_music_editor():
+    try:
+        from backend.music_editor import MusicEditor
+    except ImportError:
+        from music_editor import MusicEditor
+    return MusicEditor(get_music_library(), normalization_dir=NORMALIZATION_QUEUE_DIR)
+
+
+def get_music_trash():
+    try:
+        from backend.music_trash import MusicTrash
+    except ImportError:
+        from music_trash import MusicTrash
+    return MusicTrash(get_music_library(), normalization_dir=NORMALIZATION_QUEUE_DIR)
+
+
+class MusicPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    action: Literal['musicbrainz', 'title']
+    url: str = Field(default='', strict=True, max_length=2048)
+    candidate_key: str = Field(default='', strict=True, max_length=256)
+
+
+class MusicApplyRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    preview_token: str = Field(strict=True, min_length=1, max_length=128)
+    navi_account_id: str = Field(default='', strict=True, max_length=256)
+    navi_sync: StrictBool = False
+
+
+class MusicTrashRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    version: str = Field(strict=True, min_length=1, max_length=256)
+
+
+class MusicDeleteRequest(MusicTrashRequest):
+    confirmed: StrictBool
+
+
+@app.get('/api/music/tracks')
+def list_music_tracks(q: str = Query(default='', max_length=250), incomplete: bool = False, trashed: bool = False,
+                      offset: int = Query(default=0, ge=0), limit: int = Query(default=48, ge=1, le=100)):
+    try:
+        return get_music_library().list_tracks(query=q, incomplete=incomplete, offset=offset, limit=limit, trashed=trashed)
+    except (OSError, ValueError, sqlite3.Error):
+        raise HTTPException(503, 'Nie udało się odczytać indeksu muzyki. Spróbuj odświeżyć bibliotekę.')
+
+
+@app.post('/api/music/refresh')
+def refresh_music_library():
+    try:
+        return get_music_library().refresh()
+    except (OSError, ValueError, sqlite3.Error):
+        raise HTTPException(503, 'Nie udało się odświeżyć biblioteki muzyki.')
+
+
+@app.get('/api/music/tracks/{track_id}/cover')
+def music_track_cover(track_id: str):
+    try:
+        data, mime = get_music_library().cover(track_id)
+        return Response(data, media_type=mime, headers={'Cache-Control': 'private, max-age=300'})
+    except (KeyError, ValueError, OSError):
+        raise HTTPException(404, 'Brak okładki')
+
+
+@app.post('/api/music/tracks/{track_id}/preview')
+def preview_music_edit(track_id: str, request: MusicPreviewRequest):
+    try:
+        return get_music_editor().preview(track_id, **request.model_dump())
+    except KeyError:
+        raise HTTPException(404, 'Nie znaleziono utworu lub propozycji. Odśwież listę.')
+    except ValueError as error:
+        raise HTTPException(400, str(error))
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(503, 'Nie udało się przygotować podglądu. ' + str(error))
+
+
+@app.post('/api/music/tracks/{track_id}/apply')
+def apply_music_edit(track_id: str, request: MusicApplyRequest):
+    try:
+        snapshot = get_music_editor().validate_preview(track_id, request.preview_token)
+    except KeyError:
+        raise HTTPException(404, 'Nie znaleziono podglądu. Przygotuj go ponownie.')
+    except ValueError as error:
+        raise HTTPException(409, str(error))
+    except (OSError, RuntimeError):
+        raise HTTPException(503, 'Nie udało się sprawdzić podglądu.')
+    item = get_job_store().enqueue('music_edit', {**request.model_dump(), 'track_id': track_id,
+        'playlist_name': 'Metadane · ' + str(snapshot.get('current', {}).get('title') or 'Uzupełnianie muzyki'),
+        'navi_sync': bool(request.navi_sync and request.navi_account_id)},
+        key='music-edit:' + request.preview_token)
+    return {'status': item['status'], 'task_id': item['id'], 'message': 'Dodano uzupełnienie metadanych do kolejki.'}
+
+
+@app.post('/api/music/tracks/{track_id}/trash')
+def trash_music_track(track_id: str, request: MusicTrashRequest):
+    try:
+        return get_music_trash().move(track_id, request.version)
+    except KeyError:
+        raise HTTPException(404, 'Nie znaleziono utworu. Odśwież listę.') from None
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(409, str(error)) from None
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, 'Nie udało się zapisać oznaczenia kosza. Odśwież listę.') from None
+
+
+@app.post('/api/music/tracks/{track_id}/restore')
+def restore_music_track(track_id: str, request: MusicTrashRequest):
+    try:
+        return get_music_trash().restore(track_id, request.version)
+    except KeyError:
+        raise HTTPException(404, 'Nie znaleziono utworu. Odśwież listę.') from None
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(409, str(error)) from None
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, 'Nie udało się przywrócić utworu na listę. Odśwież bibliotekę.') from None
+
+
+@app.post('/api/music/tracks/{track_id}/delete')
+def delete_music_track(track_id: str, request: MusicDeleteRequest):
+    if not request.confirmed:
+        raise HTTPException(400, 'Potwierdź trwałe usunięcie pliku z dysku.')
+    try:
+        return get_music_trash().delete(track_id, request.version, store=get_job_store())
+    except KeyError:
+        raise HTTPException(404, 'Nie znaleziono utworu. Odśwież listę.') from None
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(409, str(error)) from None
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, 'Nie udało się potwierdzić zakończenia usuwania. Odśwież listę; ponowienie tej samej operacji sprawdzi zapisany stan.') from None
+
+
+def normalization_enabled(store=None):
+    return (store if store is not None else get_job_store()).normalization_enabled(NORMALIZATION_ENABLED)
+
+
 def public_job(job):
     value = {key: value for key, value in job.items() if key not in {"payload", "dedup_key"}}
     value["title"] = job["payload"].get("playlist_name") or {"download": "Pobieranie muzyki", "import": "Import biblioteki"}.get(job["kind"], "Zadanie")
@@ -194,9 +337,27 @@ class NormalizerJobRequest(BaseModel):
     navi_account_id: str = ""
 
 
+class NormalizerSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: StrictBool
+
+
 @app.get("/api/normalizer")
 def get_normalizer():
-    return normalizer_bridge.snapshot(NORMALIZATION_QUEUE_DIR, NORMALIZATION_ENABLED)
+    try:
+        enabled = normalization_enabled()
+    except (OSError, ValueError, sqlite3.Error):
+        raise HTTPException(503, "Nie można odczytać ustawienia. Sprawdź dostęp do bazy kolejki.") from None
+    return normalizer_bridge.snapshot(NORMALIZATION_QUEUE_DIR, enabled)
+
+
+@app.put("/api/normalizer/settings")
+def update_normalizer_settings(request: NormalizerSettingsRequest):
+    try:
+        get_job_store().set_normalization_enabled(request.enabled)
+    except (OSError, ValueError, sqlite3.Error):
+        raise HTTPException(503, "Nie udało się zapisać ustawienia. Odśwież stan i spróbuj ponownie.") from None
+    return {"enabled": request.enabled}
 
 
 def enqueue_normalizer(operation, navi_account_id=""):
@@ -374,6 +535,10 @@ class BeetsReviewRetryRequest(BaseModel):
     navi_account_id: str = ""
 
 
+class BeetsReviewSelectRequest(BeetsReviewRetryRequest):
+    candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 def validate_beets_job():
     if not BEETS_ENABLED or not shutil.which("beet"):
         raise HTTPException(status_code=400, detail="Import beets jest wyłączony lub beets nie jest zainstalowany")
@@ -430,6 +595,25 @@ def start_beets_import(request: BeetsImportRequest, background_tasks: Background
     return {"status": "started", "task_id": task_id, "message": "Rozpoczęto import nowych plików przez beets"}
 
 
+@app.post("/api/beets/review/{item_id}/select")
+def select_beets_review(item_id: str, request: BeetsReviewSelectRequest, background_tasks: BackgroundTasks):
+    if not re.fullmatch(r"[0-9a-f]{64}", item_id) or not any(
+        item["id"] == item_id for item in get_beets_review()["items"]
+    ):
+        raise HTTPException(status_code=404, detail="Nie znaleziono pozycji do sprawdzenia")
+    validate_beets_job()
+    try:
+        beets_importer.find_selection(SPOTDL_CONFIG_DIR, item_id, request.candidate_key)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except OSError:
+        raise HTTPException(status_code=500, detail="Nie udało się odczytać zapisanych propozycji")
+    task_id = str(uuid.uuid4())
+    get_job_store().enqueue("import", {**request.model_dump(), "review_item_id": item_id}, job_id=task_id)
+    background_tasks.add_task(run_pipeline_job, task_id)
+    return {"status": "started", "task_id": task_id, "message": "Zlecono zastosowanie wybranej propozycji"}
+
+
 def get_ready_download_paths():
     albums = set()
     if not os.path.isdir(BEETS_INBOX_DIR):
@@ -449,7 +633,8 @@ def get_ready_download_paths():
                   if not any(path.startswith(parent + os.sep) for parent in albums if path != parent))
 
 
-def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callback=None, review_item_id=None, defer_finalize=False):
+def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callback=None, review_item_id=None, defer_finalize=False,
+                          candidate_key=None):
     job_store.check_cancelled()
     if not (BEETS_JOB_LOCK.locked() and BEETS_STATE["last_task_id"] == task_id):
         try:
@@ -501,7 +686,8 @@ def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callbac
                     errors.append(str(error))
         pending = beets_importer.enrich_pending(
             config_dir=SPOTDL_CONFIG_DIR, dest_dir=DOWNLOADS_DIR, log_callback=log_callback,
-            retry=request.retry or bool(review_item_id), item_id=review_item_id, ready_sources=ready_sources)
+            retry=request.retry or bool(review_item_id), item_id=review_item_id, ready_sources=ready_sources,
+            **({"candidate_key": candidate_key} if candidate_key else {}))
         job_store.check_cancelled()
         errors.extend(pending["errors"])
         if review_item_id:
@@ -519,7 +705,7 @@ def run_beets_import_task(task_id: str, request: BeetsImportRequest, log_callbac
         job_store.check_cancelled()
         if organized or updated:
             fix_download_permissions(DOWNLOADS_DIR)
-            if request.navi_sync and not defer_finalize and not NORMALIZATION_ENABLED:
+            if request.navi_sync and not defer_finalize and not normalization_enabled():
                 navi = accounts.get_navidrome_account_by_id(request.navi_account_id or request.navi_user, ACCOUNTS_DIR)
                 navi_url = (navi or {}).get("server", request.navi_url)
                 navi_user = (navi or {}).get("username", request.navi_user)
@@ -911,6 +1097,8 @@ def run_pipeline_job(identity=None):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 return
+            if any((Path(SPOTDL_CONFIG_DIR) / 'music-edits').glob('*/journal.json')):
+                get_music_editor().recover(store)
             store.recover()
             job = store.claim(identity)
             if not job:
@@ -926,7 +1114,14 @@ def run_pipeline_job(identity=None):
                     store.update(job["id"], result=progress)
                     job["result"] = progress
                 if job["stage"] not in {"finalizing", "normalizing", "scanning", "playlist"}:
-                    if job["kind"] == "download":
+                    if job['kind'] == 'music_edit':
+                        store.update(job['id'], stage='importing')
+                        job_log(job['id'], '[Metadane] Sprawdzanie podglądu i zapis wybranego utworu.')
+                        result = get_music_editor().apply(job['payload']['track_id'], job['payload']['preview_token'],
+                                                         store=store, job_id=job['id'])
+                        progress = {**job['result'], **result, 'edit_applied': True}
+                        store.update(job['id'], stage='finalizing', result=progress)
+                    elif job["kind"] == "download":
                         process_download_job(store, job)
                     elif job["kind"] == "organize":
                         store.update(job["id"], stage="organizing")
@@ -938,8 +1133,10 @@ def run_pipeline_job(identity=None):
                         store.update(job["id"], stage="importing")
                         payload = dict(job["payload"])
                         review_id = payload.pop("review_item_id", None)
+                        candidate_key = payload.pop("candidate_key", None)
                         result = run_beets_import_task(job["id"], BeetsImportRequest(**payload),
-                                                       review_item_id=review_id, defer_finalize=True)
+                                                       review_item_id=review_id, defer_finalize=True,
+                                                       **({"candidate_key": candidate_key} if candidate_key else {}))
                         if result is None:
                             raise RuntimeError("Import beets jest zajęty")
                         progress = dict(job["result"])
@@ -964,7 +1161,7 @@ def run_pipeline_job(identity=None):
                 if current["status"] in {"done", "cancelled", "failed"}:
                     return
                 if current["stage"] == "finalizing" or job["stage"] in {"normalizing", "scanning", "playlist"}:
-                    if current["stage"] == "finalizing":
+                    if current["stage"] == "finalizing" and current['kind'] != 'music_edit':
                         # Reconcile beets' committed state after a crash before SQLite
                         # received the importer result. The watermark precedes all writes.
                         entries = beets_importer._load_library_state(SPOTDL_CONFIG_DIR)["tracks"].values()
@@ -981,7 +1178,7 @@ def run_pipeline_job(identity=None):
                     else:
                         call, lookup = navi_services(current["payload"])
                         pipeline.finalize(store, current, library_dir=DOWNLOADS_DIR,
-                                          normalization_dir=NORMALIZATION_QUEUE_DIR if NORMALIZATION_ENABLED else None,
+                                          normalization_dir=NORMALIZATION_QUEUE_DIR if normalization_enabled(store) else None,
                                           navi_call=call, lookup=lookup)
                 elif current["status"] == "running":
                     store.update(job["id"], status="waiting", next_attempt=time.time() + 1)
@@ -991,6 +1188,10 @@ def run_pipeline_job(identity=None):
             except job_store.JobCancelled:
                 job_log(job["id"], "[Kolejka] Zatrzymano na żądanie użytkownika.")
             except Exception as error:
+                if job['kind'] == 'music_edit' and isinstance(error, ValueError):
+                    store.update(job['id'], status='needs_review', error=str(error))
+                    job_log(job['id'], '[Kolejka] ' + str(error))
+                    return
                 failures = job["failures"] + 1
                 delay = min(3600, 30 * 2 ** min(failures - 1, 7))
                 status = "failed" if failures >= 8 else "waiting"
@@ -1387,6 +1588,8 @@ def run_download_task(task_id: str, request: DownloadRequest, defer_finalize=Fal
             else:
                 cmd = ["yt-dlp", request.url]
 
+            # Sanitization can triple the byte count; reserve room for the source ID and temporary suffixes.
+            cmd.extend(["--output", "%(title).60B [%(id)s].%(ext)s"])
             if request.flags.get("audio_only"):
                 cmd.extend(["-x", "--audio-format", "mp3", "--embed-thumbnail", "--embed-metadata"])
             if request.flags.get("skip_downloaded"):

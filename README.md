@@ -1,4 +1,4 @@
-# Downloadeusz (v2.13)
+# Downloadeusz (v2.27)
 
 **Interfejs przeglądarkowy dla SpotDL, yt-dlp i Soulseeka (slskd), uruchamiany na własnym serwerze i zintegrowany z Navidrome**
 
@@ -11,11 +11,19 @@ Główne funkcje Downloadeusza to **integracja z Navidrome przez API Subsonic**,
 ## ✨ Najważniejsze funkcje
 
 - **Zatrzymywanie zadań**: „Zatrzymaj wszystko” obok odświeżania kolejki i kosz przy aktywnym zadaniu anulują pracę bez usuwania plików. Anulowanie jest trwałe; ręczne „Ponów” zachowuje ukończone utwory. Zatrzymanie całej kolejki wstrzymuje automatyczny import i webhooki do ręcznego dodania lub ponowienia zadania. Kolejka pokazuje szczegóły błędu downloadera i nie ponawia jednoznacznie niedostępnych filmów.
-- **Wyszukiwanie stopniowe i bieżący postęp**: Soulseek ponawia wyszukiwanie coraz ogólniejszymi zapytaniami, usuwając dodatki typu „Official Audio”, z zachowaniem kontroli wykonawcy, tytułu, wersji i długości. Kafelek między formularzem a kolejką pokazuje rzeczywiście wykonywane zadanie i zapytanie. Gdy album pozostaje nieznany po rozpoznawaniu, nowe importy używają nazwy utworu jako niepotwierdzonego albumu zastępczego.
-- **Dokumentacja w aplikacji**: przycisk książki w lewym górnym rogu otwiera README, opis ostatniej wersji i instrukcję wszystkich funkcji. Widżet błędów znajduje się pod nim. Opisy wersji są przechowywane w `docs/vN.M.md`, a instrukcja w `docs/INSTRUCTION.md`.
+- **Wyszukiwanie stopniowe i bieżący postęp**: Soulseek ponawia wyszukiwanie coraz ogólniejszymi zapytaniami, usuwając dodatki typu „Official Audio”, z zachowaniem kontroli wykonawcy, tytułu, wersji i długości. Kafelek „Aktualne zadanie” w oknie kolejki pokazuje rzeczywiście wykonywane zadanie i zapytanie. Gdy album pozostaje nieznany po rozpoznawaniu, nowe importy używają nazwy utworu jako niepotwierdzonego albumu zastępczego.
+- **Kolejka w osobnym oknie**: widżet bezpośrednio pod ustawieniami, w prawym górnym rogu, otwiera aktualne zadanie, historię, sterowanie kolejką, szczegóły utworów i terminal na żywo. Zamknięcie okna nie zatrzymuje pracy ani odświeżania stanu.
+- **Przeglądarka muzyki**: widżet **Muzyka** po prawej stronie, pod kolejką, otwiera bibliotekę z okładkami, wyszukiwaniem tytułów, wykonawców i albumów oraz wyborem 2, 3, 4 lub 6 utworów w rzędzie. Obejmuje pliki audio w `/downloads`, także wcześniejszą muzykę poza historią importów Downloadeusza.
+- **Kosz muzyki jako filtr**: **Przenieś do kosza** ukrywa utwór na zwykłych listach Downloadeusza, pozostawiając plik audio w dotychczasowym miejscu i bez zmian. Zakładka **Muzyka → Kosz** pozwala go przywrócić na listy albo wybrać **Usuń z dysku**. Dopiero osobne potwierdzenie tej drugiej operacji trwale usuwa plik biblioteczny.
+- **Ręczne uzupełnianie albumów**: zakładka **Nieuzupełnione** pokazuje brakujące i niepotwierdzone albumy, również automatyczne albumy zastępcze. Wskaż link MusicBrainz, wybierz konkretne wydanie i utwór, porównaj tagi i ścieżkę, a następnie zleć zmianę przez kolejkę. Osobna akcja **Nazwij album tytułem piosenki** zapisuje świadomie zaakceptowany album zastępczy.
+- **Dokumentacja i widżety**: przycisk książki w lewym górnym rogu otwiera README, opis ostatniej wersji i instrukcję wszystkich funkcji. Bezpośrednio pod nim jest widżet Normalizeusza otwierający osobne okno, a niżej widżet błędów. Opisy wersji są przechowywane w `docs/vN.M.md`, a instrukcja w `docs/INSTRUCTION.md`.
 - 🎨 **Interfejs na telefon i komputer**: układ kafelkowy z półprzezroczystymi panelami, własnymi tapetami, gotowymi tłami i wyborem koloru akcentu.
+- **Dolny dock widżetów**: w ustawieniach, w sekcji **Wygląd**, opcja **Widżety w dolnym docku** przenosi dokumentację, Normalizeusza, kolejkę, muzykę, ustawienia i warunkowy przycisk błędów na wspólny pasek przy dolnej krawędzi ekranu. Muzyka znajduje się na jego lewym końcu, a ustawienia na prawym. Dock ma szerokość głównych kafelków i takie same zaokrąglenia. Ustawienie jest domyślnie wyłączone, działa na telefonie i komputerze oraz zapisuje się w tej przeglądarce. Opisy położenia przycisków w rogach dotyczą domyślnego układu.
+- **Ustawienia w oknie pop-up**: koło zębate w prawym górnym rogu otwiera wyśrodkowane okno z przewijaną treścią, tak jak dokumentacja i Normalizeusz. Zamykasz je przyciskiem X, klawiszem Escape lub kliknięciem tła; preferencje zapisują się jak dotychczas.
+- **Narzędzia pobierania**: osobny kafelek w ustawieniach pozwala niezależnie ukrywać podgląd komendy pobierania i przycisk pobierania samych metadanych Spotify. Oba przełączniki są domyślnie włączone i zapamiętywane w tej przeglądarce. Te opcje oraz dock korzystają z takich samych wycentrowanych przełączników suwakowych jak widoczność tytułu.
 - 🎵 **Pobieranie przez SpotDL i yt-dlp**: obsługa list ze Spotify oraz źródeł YouTube i SoundCloud, automatyczne rozpoznawanie linków i obsługa metadanych.
-- 🔄 **Porządkowanie Soulseeka (slskd)**: wybór ukończonych pobrań. Przy włączonym beets aplikacja dopasowuje albumy, kopiuje muzykę, zapisuje tagi i zachowuje oryginały. Po wyłączeniu beets dostępny jest starszy mechanizm oparty na tagach.
+- **Długie nazwy YouTube i SoundCloud**: yt-dlp skraca tytuł w nazwie pliku według liczby bajtów i zachowuje identyfikator źródła, z zapasem na pliki tymczasowe. Pełny tytuł w tagach pozostaje bez zmian. Mechanizm obejmuje również zapasowy YouTube w trybie Soulseek i kopiowane polecenie z podglądu komendy.
+- 🔄 **Porządkowanie Soulseeka (slskd)**: w widżecie **Muzyka**, w zakładce **Porządkowanie**, znajdują się import, harmonogram, rozpoznawanie i zapisane propozycje beets. Przy włączonym beets aplikacja dopasowuje albumy, kopiuje muzykę, zapisuje tagi i zachowuje oryginały. Po wyłączeniu beets dostępny jest starszy mechanizm oparty na tagach.
 - 🔍 **Sprawdzanie duplikatów w Navidrome**: weryfikacja biblioteki przed pobraniem pozwala pominąć posiadane utwory, np. gdy istnieje już kopia bezstratna lub inny akceptowany plik.
 - 📡 **Terminal na żywo i stan usług**: logi pobierania i porządkowania przez SSE, przyciski testowania połączeń oraz wskaźniki stanu Navidrome i slskd.
 - 💾 **Zapamiętywanie ustawień**: dane logowania pozostają w montowanych plikach kont, a wygląd i preferencje pobierania są przechowywane w `localStorage` przeglądarki.
@@ -33,7 +41,7 @@ Zalecany sposób uruchamiania Downloadeusza to Docker Compose (`docker compose`)
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.13
+    image: downloadeusz:2.27
     container_name: downloadeusz
     restart: unless-stopped
     ports:
@@ -88,7 +96,7 @@ services:
 > - `/spotdl_config` przechowuje ciasteczka, np. `youtube_cookies.txt`, trwałą kolejkę i stan beets. Pliki kont są montowane osobno z katalogu zawierającego Compose.
 > - `/app/frontend/assets/wallpapers` to miejsce na własne tapety.
 
-Ten przykład odpowiada dołączonemu `docker-compose.yml`. Domyślnie włącza beets oraz współpracę z osobnym Normalizeuszem. Jeśli nie uruchamiasz Normalizeusza, ustaw `NORMALIZATION_ENABLED=false` w pliku `.env` obok Compose; w przeciwnym razie zadania będą czekać na potwierdzenie normalizacji. Konfigurację wspólnego katalogu opisuje sekcja „Potwierdzanie ReplayGain przez Normalizeusza”.
+Ten przykład odpowiada dołączonemu `docker-compose.yml`. Domyślnie włącza beets oraz współpracę z osobnym Normalizeuszem. Jeśli nie uruchamiasz Normalizeusza, wyłącz **ReplayGain po imporcie** w panelu Normalizeusza. Przed pierwszym uruchomieniem możesz też ustawić `NORMALIZATION_ENABLED=false` w pliku `.env` obok Compose; inaczej zadania będą czekać na potwierdzenie normalizacji. Zapisany przełącznik ma pierwszeństwo przed tą zmienną. Konfigurację wspólnego katalogu opisuje sekcja „Potwierdzanie ReplayGain przez Normalizeusza”.
 
 Przed uruchomieniem umieść oba pliki `navidrome_accounts.txt` i `slskd_accounts.txt` obok `docker-compose.yml`; plik dla nieużywanej usługi może pozostać pusty. Są montowane tylko do odczytu. Brak pliku zatrzymuje uruchomienie zamiast tworzyć katalog o jego nazwie. Format opisano w sekcji o kontach poniżej.
 
@@ -98,6 +106,10 @@ Przed uruchomieniem umieść oba pliki `navidrome_accounts.txt` i `slskd_account
 docker compose up --build -d
 ```
 4. Otwórz w przeglądarce `http://<ADRES-SERWERA>:9000`.
+
+## Publikacja Git
+
+Docelową gałęzią publikacji Downloadeusza jest `main` w repozytorium `origin`. Praca może pozostać na gałęzi roboczej; po uzgodnieniu historii z aktualnym `origin/main` publikacja używa `git push origin HEAD:main`, bez force push. Aktualizacja aplikacji jest niezależna od publikacji Git. Opcjonalny push wykonuj po ręcznym sprawdzeniu aplikacji.
 
 ## Beets: automatyczne porządkowanie nowych pobrań
 
@@ -112,11 +124,13 @@ Sam backend bez ustawienia `BEETS_ENABLED=true` zachowuje dotychczasowe działan
 - **Nagranie a wydanie:** drobne różnice pisowni mogą być zaakceptowane, jeśli zgadzają się wykonawca, tytuł i długość, a wynik nie jest niejednoznaczny. Wersje koncertowe, remiksy, radio edit, acoustic, instrumental i demo są rozróżniane. Zgodność nagrania oraz zgodność danych wydania są zapisywane osobno; przy niepotwierdzonym wydaniu zachowywane są istniejące dane albumu.
 - **Foldery i okładki:** rozpoznana muzyka trafia do `Wykonawca albumu/Rok - Album/Numer Tytuł.ext`; albumy wielopłytowe mają numer płyty przed numerem utworu. Beets poprawia tagi kopii i pobiera dostępną okładkę albumu. Oryginalne pliki i jakość dźwięku są zachowane; nie ma konwersji formatów.
 - **Pojedyncze piosenki:** brak albumu oznacza ścieżkę `Wykonawca/_Single/Tytuł.ext`. Nie jest dopisywany wymyślony album ani rok. Istniejąca osadzona okładka pozostaje w kopii. Brakująca okładka może zostać uzupełniona później także dla pojedynczego utworu, jeśli jego tagi zawierają prawidłowy identyfikator wydania MusicBrainz; nie jest wybierany przypadkowy album wyłącznie na podstawie tytułu piosenki.
-- **Do sprawdzenia:** panel rozdziela pliki czekające na import, dodane według tagów oraz nagrania rozpoznane z niepotwierdzonym wydaniem. Pokazuje powód, do trzech propozycji dopasowania i przycisk ponowienia dla konkretnego pliku. Propozycje nie są automatycznie traktowane jako zatwierdzony wybór użytkownika.
+- **Do sprawdzenia:** panel rozdziela pliki czekające na import, dodane według tagów oraz nagrania rozpoznane z niepotwierdzonym wydaniem. Pokazuje powód, do trzech propozycji dopasowania i przycisk ponowienia dla konkretnego pliku. Zaznacz widoczne kółko przy nazwie właściwej propozycji i kliknij „Zastosuj wybraną propozycję”. Osobno rozwiń „Szczegóły propozycji”, aby zobaczyć dostępne dane (długość, wydanie, wytwórnię, numer katalogowy) i link do MusicBrainz. Wybór zapisuje metadane dokładnie tej propozycji, bez nowego wyszukiwania dopasowania. Propozycja nagrania nie stanowi potwierdzenia wydania; propozycja utworu z wydania stosuje jego dane tylko do wskazanego pliku. Starsze skrócone propozycje mają widoczny komunikat i wymagają „Sprawdź ponownie”, zanim będzie można je wybrać.
 - **Późniejsze uzupełnianie:** niepotwierdzone wpisy są ponownie sprawdzane raz na dobę przez działający harmonogram. Przycisk „Ponów rozpoznawanie” lub ponowienie konkretnej pozycji nie czeka na ten termin. Wzbogacanie aktualizuje istniejącą kopię w jej bieżącej lokalizacji, bez ponownego kopiowania źródła; działa również po usunięciu oryginału z katalogu pobrań. Navidrome może zostać przeskanowany także po samej aktualizacji metadanych.
 - **Historia:** baza beets, `import-state.json`, `library-state.json` i `review.log` są przechowywane w `/spotdl_config/beets`. Historia każdego nowego utworu zapisuje osobno ścieżkę kopii, dodanie do biblioteki oraz potwierdzenie danych. Kolejne uruchomienia i zmiany zawartości folderu nie kopiują ponownie śledzonych plików. Starsze udane importy bez mapowania źródło–kopia pozostają pominięte, aby aktualizacja nie utworzyła duplikatów. Zachowaj ten katalog przy aktualizacji kontenera.
 
 Przed wzbogaceniem aplikacja sprawdza SHA256 pakietów audio, bez tagów kontenera. Dopisanie ReplayGain lub okładki nie blokuje dalszego wzbogacania; podmiana audio nadal je zatrzymuje. Starsze wpisy bez bezpiecznej podstawy porównania pozostają do sprawdzenia. Zapis jest zabezpieczony kopią tymczasową, przywracaną po błędzie. Beets i nowy Normalizeusz korzystają ze wspólnej blokady `.downloadeusz-write.lock` w bibliotece.
+
+Ręczny wybór korzysta z tych samych zabezpieczeń i trwałej kolejki. Jawnie potwierdza propozycję także wtedy, gdy automatyka uznała ją za niepewną — porównaj wykonawcę, wersję i długość przed zastosowaniem. Istniejąca kopia pozostaje w bieżącej lokalizacji, a oryginał nie jest zmieniany. Plik jeszcze niezaimportowany czeka na potwierdzenie zakończenia pobierania. Nieaktualna propozycja lub błąd zapisu nie uruchamia wyboru innego dopasowania.
 
 | Zmienna | Znaczenie |
 | --- | --- |
@@ -132,6 +146,28 @@ Identyfikacja śledzonych kopii opiera się na zapisanym źródle. Inne źródł
 Oryginały zajmują dodatkowe miejsce na dysku i nie są automatycznie usuwane.
 
 Przy włączonym beets playlisty przechodzą przez ten sam import co pozostałe audio. Natywna playlista Navidrome powstaje z zapisanej kolejności utworów po zakończeniu skanowania; obejmuje też nagrania już posiadane i powtórzenia. Jeśli indeks nie zawiera wszystkich pozycji, aplikacja czeka do 10 minut, a następnie oznacza niepełny wynik jako wymagający sprawdzenia. Ponowienie aktualizuje zapisaną playlistę. Starszy przepływ bez beets sprząta wyłącznie znany plik `.m3u` danego zadania.
+
+## Biblioteka muzyki i ręczne metadane
+
+**Przenieś do kosza** jest oznaczeniem w bazie aplikacji. Nie kopiuje, nie przenosi ani nie usuwa pliku audio i nie zmienia jego tagów. Utwór znika z **Biblioteki** i **Nieuzupełnionych**, a pojawia się w zakładce **Kosz**. **Przywróć** usuwa tylko to oznaczenie. Stan kosza zapisuje się w `/spotdl_config/music-library.sqlite3`, przetrwa restart i ponowne skanowanie biblioteki. Kosz ma własne wyszukiwanie i strony. Ponieważ plik pozostaje w bibliotece na dysku, Navidrome nadal może go odtwarzać.
+
+Dopiero **Usuń z dysku** w zakładce **Kosz**, po osobnym potwierdzeniu tytułu, wykonawcy i ścieżki, usuwa plik biblioteczny. API odrzuca tę operację dla utworu poza koszem. Przed usunięciem sprawdzane są wersja pliku, niedokończone zadania, blokady importera i Normalizeusza oraz dowiązania. Oddzielne źródłowe pobranie w Soulseeku lub inboxie pozostaje bez zmian. Po trwałym usunięciu importer zachowuje znacznik zapobiegający automatycznemu przywróceniu kopii; Navidrome uwzględni brak pliku po kolejnym skanowaniu.
+
+API udostępnia `GET /api/music/tracks?trashed=true`, oznaczenie `POST /api/music/tracks/{id}/trash` i przywrócenie `POST /api/music/tracks/{id}/restore` z `{"version": "wersja z listy utworów"}`. Trwałe usunięcie to `POST /api/music/tracks/{id}/delete` z `{"confirmed": true, "version": "wersja z listy utworów"}`.
+
+Widżet **Muzyka**, pod kolejką po prawej stronie lub na lewym końcu docka, zawiera zakładki **Biblioteka**, **Nieuzupełnione**, **Kosz** i **Porządkowanie**. Ostatnia skupia panel beets oraz przycisk porządkowania pobrań Soulseeka. Główny pasek statusu pozostaje pod formularzem.
+
+Biblioteka indeksuje tagi plików w `DOWNLOADS_DIR`; nie wymaga konta Navidrome ani ponownego importu całej muzyki do beets. Otwarcie okna lub jawne odświeżenie sprawdza pliki, a kolejne wyszukiwania i strony korzystają z indeksu. Miniatury pochodzą z lokalnej okładki lub tagów pliku. Wyszukiwanie obejmuje tytuł, wykonawcę i album, niezależnie od wielkości liter i znaków diakrytycznych. Widok ma strony po 48 pozycji i zapamiętywany wybór liczby kolumn.
+
+Ręczne uzupełnianie przyjmuje linki HTTPS do `musicbrainz.org` typu `release`, `recording` i `release-group`. Wymaga jawnego wyboru wydania i pozycji utworu oraz zatwierdzenia podglądu tagów i ścieżki. Wykorzystuje zainstalowany adapter MusicBrainz beets, bez dodatkowych zależności ani własnego klucza API. **Nazwij album tytułem piosenki** działa bez wyszukiwania MusicBrainz i zapisuje zaakceptowany album zastępczy, niepotwierdzający wydania.
+
+Wersja 2.23 naprawia zapis obu operacji dla plików FLAC zatrzymujących się wcześniej z błędem `pop expected at most 1 argument, got 2`. Po aktualizacji zadania oczekujące ponowią próbę zgodnie z harmonogramem; dla zakończonych błędem użyj **Ponów**. Jeśli podgląd wygasł lub plik zmienił się po innym zleceniu, przygotuj nowe dopasowanie w edytorze.
+
+Przy polu linku dostępne są **Szukaj w MusicBrainz** — wyszukiwanie nagrań po tytule i wykonawcy — oraz **Szukaj tylko tytułu**. Otwierają wyniki w nowej karcie z gotowym zapytaniem, zachowując wybrany utwór w Downloadeuszu. Album zastępczy nie zawęża wyszukiwania. Po znalezieniu właściwego nagrania lub wydania wklej jego adres do pola **Link MusicBrainz** i wybierz **Pokaż dopasowanie**.
+
+Zmiana jest osobnym zadaniem w istniejącej kolejce. Kopia biblioteczna otrzymuje tagi i ścieżkę według końcowych reguł beets; źródło pobrania pozostaje bez zmian. Zapis kontroluje tożsamość audio, wersję pliku i kolizje nazw oraz używa wspólnej blokady biblioteki z Normalizeuszem. Niedokończone zadania wskazujące plik opóźniają edycję. Po sukcesie aktualizowane są powiązania ścieżek, a finalizacja korzysta z dotychczasowych ustawień Normalizeusza i synchronizacji wybranego Navidrome. Dotychczasowe zapisane propozycje beets pozostają osobną akcją poprawiającą tagi bez zmiany lokalizacji.
+
+Indeks `/spotdl_config/music-library.sqlite3` i podglądy oraz kopie odzyskiwania w `/spotdl_config/music-edits` korzystają z obecnego wolumenu konfiguracji. Nie usuwaj stanu edycji ani kopii odzyskiwania w trakcie zadania. API udostępnia stronicowaną listę `GET /api/music/tracks`, odświeżanie `POST /api/music/refresh`, lokalne okładki i operacje podglądu/zlecenia edycji dla identyfikatora utworu. Przeglądanie indeksu nie zapisuje tagów muzyki.
 
 ## Nowości v2.2: trwała kolejka i Soulseek
 
@@ -173,11 +209,19 @@ Webhook jedynie zleca sprawdzenie ukończonych transferów; ścieżka z jego tre
 
 Przebuduj także Normalizeusza z obsługą kolejki v2.2. Utwórz `~/spotdl/normalization` z prawami zapisu dla UID/GID obu usług i zamontuj go w Normalizeuszu jako `/normalization`. Downloadeusz widzi ten sam katalog przez istniejący wolumen jako `/spotdl_config/normalization`.
 
-W Compose `NORMALIZATION_ENABLED` jest domyślnie `true`; ustaw `false`, jeżeli używasz aplikacji bez Normalizeusza. Przy uruchamianiu samego backendu poza Compose domyślne ustawienie pozostaje `false`. Przy włączonej integracji zadanie czeka na potwierdzenie normalizacji, a dopiero później zleca skan Navidrome. Brak działającego Normalizeusza oznacza oczekiwanie w kolejce, bez fałszywego sukcesu.
+W Compose `NORMALIZATION_ENABLED` jest domyślnie `true`; przy uruchamianiu samego backendu poza Compose domyślne ustawienie pozostaje `false`. Wartość ta obowiązuje do pierwszego zapisu przełącznika **ReplayGain po imporcie** w panelu Normalizeusza. Przełącznik jest wspólny dla wszystkich użytkowników i zapisuje się w `/spotdl_config/jobs.sqlite3`, więc przetrwa restart i odtworzenie kontenera ze wspólnym wolumenem. Zapisana wartość ma pierwszeństwo przed `.env`. Ustawienie można zmieniać także przy niedostępnym Normalizeuszu. API udostępnia odczyt stanu w `GET /api/normalizer` i zapis przez `PUT /api/normalizer/settings` z JSON `{"enabled": false}` albo `{"enabled": true}`.
+
+Przed zatrzymaniem Normalizeusza wyłącz **ReplayGain po imporcie** i poczekaj na potwierdzenie zapisu. Zmiana nie wymaga restartu: kolejne sprawdzenie finalizacji przez worker korzysta z bieżącego ustawienia. Pobieranie, beets, skany i playlisty Navidrome mogą wtedy działać bez potwierdzenia ReplayGain. Istniejące tagi głośności pozostają w plikach. Przełącznik nie zatrzymuje kontenera Normalizeusza ani jego niezależnego obserwowania biblioteki. Przy włączonej integracji oczekiwanie na potwierdzenie nie ma automatycznego limitu czasu; worker może w tym czasie obsługiwać inne gotowe zadania.
+
+Wyłączenie automatycznej integracji pozwala także dokończyć oczekujące zwykłe zadania pobierania i importu przy ich kolejnym podjęciu. Nie kończy jednak ręcznych zleceń panelu Normalizeusza ani nie usuwa już wysłanych plików kolejki. Po ponownym uruchomieniu Normalizeusz może je obsłużyć; anulowanie w Downloadeuszu nie wycofuje zlecenia z osobnej usługi. Ręczne sprawdzanie ReplayGain i naprawa albumów wymagają działającego Normalizeusza.
+
+Jeśli integrację włączono podczas trwającego skanu Navidrome, po potwierdzeniu normalizacji aplikacja zleca nowy skan, aby uwzględnił zmienione tagi.
 
 Obie usługi muszą widzieć tę samą bibliotekę i mieć wspólny dostęp do `.downloadeusz-write.lock`. Zalecany `MAX_THREADS=1` ogranicza równoległą analizę audio. Nowa kolejka nie uruchamia analizy całej biblioteki przy każdym sprawdzeniu.
 
 ### Panel Normalizeusza i stare pliki
+
+Cały panel Normalizeusza jest dostępny w oknie pop-up po kliknięciu jego widżetu w lewym górnym rogu, bezpośrednio pod przyciskiem książki. Zawiera przełącznik **ReplayGain po imporcie**, stan usługi, akcje ręczne, postęp i historię z raportami. Kontrolki przeniesiono z formularza strony głównej. Okno zamkniesz przyciskiem X, klawiszem Escape lub kliknięciem tła poza nim; zamknięcie nie przerywa zadań. Stan jest odświeżany przy otwieraniu okna.
 
 Normalizeusz pozostaje osobnym kontenerem. Wersja 2.3 udostępnia sygnał działania i operacje protokołu kolejki v2; panel Downloadeusza pokazuje dostępność, postęp, raporty i błędy bez bezpośredniego dostępu do Dockera. Obie aktualizacje są potrzebne do nowych funkcji panelu. Starsze zlecenia normalizacji konkretnych plików zachowują zgodność.
 
@@ -188,6 +232,10 @@ Normalizeusz pozostaje osobnym kontenerem. Wersja 2.3 udostępnia sygnał dział
 Startowy skan Normalizeusza nie wykonuje masowego uzupełniania albumów. Nowe/zmienione pliki obserwowane przez Normalizeusza mogą być uzupełniane przy normalnej obsłudze zdarzeń. Album zastępczy ma przenośny znacznik pochodzenia, rozpoznawany również przez beets w Downloadeuszu; nie potwierdza konkretnego wydania. Ręczne zlecenia są dostępne także przy wyłączonej automatycznej integracji, jeżeli kolejka i Normalizeusz działają. Po operacji zmieniającej bibliotekę wybrane konto Navidrome jest skanowane dopiero po potwierdzeniu z Normalizeusza.
 
 Historia panelu i raporty są ograniczone do najnowszych wpisów i próbek; liczniki obejmują cały przebieg. Długi ręczny skan może opóźnić inne zlecenia normalizacji w osobnym kontenerze. Downloadeusz nadal obsługuje kolejkę pobierania, a normalizacja oczekuje na swój wynik.
+
+## Graf zależności kodu
+
+`graphify-out/graph.html` zawiera interaktywny graf, `graphify-out/graph.json` dane grafu, a `graphify-out/GRAPH_REPORT.md` raport. Widok HTML pobiera bibliotekę wizualizacji z `unpkg.com` i wymaga dostępu do tej domeny. Graf powstaje strukturalnie z kodu Python i JavaScript aplikacji oraz testów; nie obejmuje semantycznej analizy dokumentacji, HTML/CSS, konfiguracji Compose ani danych i sekretów. Jest pomocą do analizy źródeł, a nie dowodem kompletności zależności między usługami. Istniejący graf przedstawia wersję 2.16 i nie obejmuje przełącznika z 2.17; po zmianach kodu wymaga odświeżenia. Nie jest potrzebny do uruchomienia aplikacji i nie jest kopiowany do obrazu Dockera.
 
 ## ⚙️ Integracja z Navidrome i Soulseekiem — konta w plikach
 
@@ -221,9 +269,9 @@ Poza Dockerem domyślny katalog kont to główny katalog projektu, wyznaczany wz
 
 3. **Pobieranie samych metadanych ze Spotify i generator poleceń FFmpeg**:
    - Wklej link ze Spotify (utwór lub album) w zakładce Spotify.
-   - Kliknij **„Pobierz same metadane”**.
+   - Kliknij **„Pobierz same metadane”**. Widoczność tego przycisku zmienisz w ustawieniach, w kafelku **Narzędzia pobierania**.
    - Podgląd wyświetli metadane, okładkę i wygenerowaną komendę FFmpeg. Podmień wartość `FILE=...` na ścieżkę właściwego pliku przed samodzielnym uruchomieniem w terminalu.
-   - Przycisk kopiowania skopiuje komendę do schowka i pokaże ją w konsoli aplikacji; nie uruchamia jej na serwerze.
+   - Przycisk kopiowania skopiuje komendę do schowka i pokaże ją w terminalu w oknie kolejki; nie uruchamia jej na serwerze.
 
 ## 🛠️ Wykorzystane technologie
 

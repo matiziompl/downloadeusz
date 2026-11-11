@@ -2,6 +2,45 @@ function appData() {
     return {
         // App State
         settingsOpen: false,
+        settingsPreviousOverflow: '',
+        queueOpen: false,
+        queuePreviousOverflow: '',
+        musicOpen: false,
+        musicPreviousOverflow: '',
+        musicTab: 'library',
+        musicTabs: [{ id: 'library', label: 'Biblioteka' }, { id: 'incomplete', label: 'Nieuzupełnione' }, { id: 'trash', label: 'Kosz' }, { id: 'organize', label: 'Porządkowanie' }],
+        musicColumns: 4,
+        musicQuery: '',
+        musicItems: [],
+        musicTotal: 0,
+        musicOffset: 0,
+        musicLimit: 48,
+        fetchingMusic: false,
+        refreshingMusic: false,
+        musicError: '',
+        musicRefreshError: '',
+        musicRefreshQueued: false,
+        musicController: null,
+        musicRefreshController: null,
+        musicSelectedTrack: null,
+        musicUrl: '',
+        musicChoices: [],
+        musicChoiceKey: '',
+        musicPreview: null,
+        musicCurrentCoverError: false,
+        musicProposedCoverError: false,
+        previewingMusic: false,
+        applyingMusic: false,
+        trashingMusic: false,
+        musicDeleteConfirmation: null,
+        musicTrashError: '',
+        musicTrashController: null,
+        musicPreviewController: null,
+        musicApplyController: null,
+        musicEditorError: '',
+        musicActionMessage: '',
+        musicJobStates: {},
+        musicPendingEdits: {},
         appVersion: '',
         documentationOpen: false,
         documentationSection: 'readme',
@@ -10,6 +49,8 @@ function appData() {
         documentationError: '',
         documentationController: null,
         documentationPreviousOverflow: '',
+        normalizerOpen: false,
+        normalizerPreviousOverflow: '',
         documentationTabs: [
             { id: 'readme', label: 'README' },
             { id: 'latest', label: 'Ostatnia wersja' },
@@ -61,6 +102,7 @@ function appData() {
         beetsReviewItems: [],
         beetsReviewLimit: 20,
         beetsReviewError: '',
+        beetsCandidateSelections: {},
         fetchingBeetsReview: false,
         retryingBeetsReviewId: null,
         fetchingBeets: false,
@@ -74,6 +116,14 @@ function appData() {
         submittingNormalizer: '',
         normalizerController: null,
         normalizerActionController: null,
+        savingNormalizerSettings: false,
+        normalizerSettingsError: '',
+        normalizerSettingsMessage: '',
+        normalizerSettingsController: null,
+
+        get canSetNormalizerEnabled() {
+            return !this.destroyed && !!this.normalizerStatus && !this.normalizerError && !this.savingNormalizerSettings;
+        },
 
         get normalizerRequests() {
             return (this.normalizerStatus?.requests || []).slice(0, 20);
@@ -157,6 +207,7 @@ function appData() {
         get canImportBeets() {
             return Boolean(this.beetsStatus?.enabled && this.beetsStatus.available
                 && !this.beetsStatus.running && !this.fetchingBeets && !this.importingBeets
+                && !this.fetchingBeetsReview
                 && !this.loading && !this.organizingSlskd);
         },
 
@@ -181,6 +232,39 @@ function appData() {
             const song = [candidate.artist, candidate.title].filter(Boolean).join(' — ');
             const album = [candidate.album, candidate.year].filter(Boolean).join(' · ');
             return [song, album].filter(Boolean).join(' / ') || 'Propozycja bez opisu';
+        },
+
+        beetsCandidateSelectable(candidate) {
+            return ['recording', 'release'].includes(candidate.kind)
+                && /^[0-9a-f]{64}$/.test(candidate.selection_key || '');
+        },
+
+        beetsSelectedCandidate(item) {
+            return (Array.isArray(item.candidates) ? item.candidates : []).find(candidate =>
+                this.beetsCandidateSelectable(candidate)
+                && candidate.selection_key === this.beetsCandidateSelections[item.id]) || null;
+        },
+
+        beetsCandidateUrl(candidate) {
+            if (!['recording', 'release'].includes(candidate.kind)
+                || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.id || '')) return '';
+            return `https://musicbrainz.org/${candidate.kind}/${candidate.id}`;
+        },
+
+        beetsCandidateDetails(candidate) {
+            const duration = Number(candidate.length);
+            const seconds = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+            return [
+                ['Typ', candidate.kind === 'release' ? 'Nagranie z konkretnego wydania'
+                    : candidate.kind === 'recording' ? 'Nagranie bez potwierdzenia wydania' : 'Starsza propozycja'],
+                ['Długość', seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : ''],
+                ['Wydanie', [candidate.country, candidate.media].filter(Boolean).join(' · ')],
+                ['Wytwórnia', candidate.label],
+                ['Numer katalogowy', candidate.catalognum],
+                ['Dopisek wersji', candidate.disambiguation],
+                ['Płyta / utwór', [candidate.disc, candidate.track].filter(Boolean).join(' / ')],
+                ['MusicBrainz ID', candidate.id],
+            ].filter(([, value]) => value);
         },
 
         // Spotify Metadata
@@ -219,6 +303,9 @@ function appData() {
         
         // Settings / Appearance
         showTitle: true,
+        widgetsDocked: false,
+        showCommandPreview: true,
+        showMetadataButton: true,
         themeColor: '#3b82f6', // default blue or 'auto'
         extractedColor: '#3b82f6', // used when themeColor is 'auto'
         availableColors: ['#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#6b7280', '#ffffff', '#14b8a6', '#0ea5e9', '#6366f1', '#a855f7', '#d946ef', '#f43f5e', '#eab308'],
@@ -286,6 +373,9 @@ function appData() {
             
             // Watch for changes and save to local storage
             this.$watch('showTitle', () => this.saveSettings());
+            this.$watch('widgetsDocked', () => this.saveSettings());
+            this.$watch('showCommandPreview', () => this.saveSettings());
+            this.$watch('showMetadataButton', () => this.saveSettings());
             this.$watch('themeColor', () => { this.saveSettings(); this.updateExtractedColor(); });
             this.$watch('bgType', () => { this.saveSettings(); this.updateExtractedColor(); });
             this.$watch('bgPreset', () => { this.saveSettings(); this.updateExtractedColor(); });
@@ -334,6 +424,23 @@ function appData() {
 
         destroy() {
             this.destroyed = true;
+            if (this.musicOpen) {
+                this.$refs.musicDialog.close();
+                this.musicClosed();
+            }
+            this.musicTrashController?.abort();
+            if (this.settingsOpen) {
+                this.$refs.settingsDialog.close();
+                this.settingsClosed();
+            }
+            if (this.queueOpen) {
+                this.$refs.queueDialog.close();
+                this.queueClosed();
+            }
+            if (this.normalizerOpen) {
+                this.$refs.normalizerDialog.close();
+                this.normalizerClosed();
+            }
             clearInterval(this.beetsPollTimer);
             clearInterval(this.jobsPollTimer);
             clearTimeout(this.copiedMetaFeedbackTimer);
@@ -343,6 +450,11 @@ function appData() {
             this.documentationController?.abort();
             this.normalizerController?.abort();
             this.normalizerActionController?.abort();
+            this.normalizerSettingsController?.abort();
+            this.musicController?.abort();
+            this.musicRefreshController?.abort();
+            this.musicPreviewController?.abort();
+            this.musicApplyController?.abort();
             this.eventSource?.close();
         },
 
@@ -358,7 +470,7 @@ function appData() {
         },
 
         openDocumentation() {
-            this.settingsOpen = false;
+            if (this.destroyed || this.documentationOpen || this.normalizerOpen || this.settingsOpen || this.queueOpen || this.musicOpen) return;
             this.errorsOpen = false;
             this.documentationPreviousOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
@@ -376,6 +488,27 @@ function appData() {
             this.documentationController?.abort();
             document.body.style.overflow = this.documentationPreviousOverflow;
             this.$refs.documentationTrigger.focus();
+        },
+
+        openNormalizer() {
+            if (this.destroyed || this.normalizerOpen || this.documentationOpen || this.settingsOpen || this.queueOpen || this.musicOpen) return;
+            this.$refs.normalizerDialog.showModal();
+            this.errorsOpen = false;
+            this.normalizerPreviousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.normalizerOpen = true;
+            this.fetchNormalizer(true);
+        },
+
+        closeNormalizer() {
+            this.$refs.normalizerDialog.close();
+        },
+
+        normalizerClosed() {
+            if (!this.normalizerOpen) return;
+            this.normalizerOpen = false;
+            document.body.style.overflow = this.normalizerPreviousOverflow;
+            if (!this.destroyed) this.$refs.normalizerTrigger.focus();
         },
 
         async loadDocumentation(section) {
@@ -417,13 +550,415 @@ function appData() {
             this.$nextTick(() => document.getElementById(`documentation-tab-${tabs[index].id}`).focus());
         },
         
-        toggleSettings() {
-            this.settingsOpen = !this.settingsOpen;
+        openSettings() {
+            if (this.destroyed || this.settingsOpen || this.documentationOpen || this.normalizerOpen || this.queueOpen || this.musicOpen) return;
+            this.$refs.settingsDialog.showModal();
+            this.errorsOpen = false;
+            this.settingsPreviousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.settingsOpen = true;
+        },
+
+        closeSettings() {
+            this.$refs.settingsDialog.close();
+        },
+
+        settingsClosed() {
+            if (!this.settingsOpen) return;
+            this.settingsOpen = false;
+            document.body.style.overflow = this.settingsPreviousOverflow;
+            if (!this.destroyed) this.$refs.settingsTrigger.focus();
+        },
+
+        openQueue() {
+            if (this.destroyed || this.queueOpen || this.settingsOpen || this.documentationOpen || this.normalizerOpen || this.musicOpen) return;
+            this.$refs.queueDialog.showModal();
+            this.errorsOpen = false;
+            this.queuePreviousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.queueOpen = true;
+            this.$nextTick(() => {
+                if (!this.queueOpen || this.destroyed) return;
+                const container = document.getElementById('log-container');
+                if (container) container.scrollTop = container.scrollHeight;
+            });
+            this.fetchJobs();
+        },
+
+        closeQueue() {
+            this.$refs.queueDialog.close();
+        },
+
+        queueClosed() {
+            if (!this.queueOpen) return;
+            this.queueOpen = false;
+            document.body.style.overflow = this.queuePreviousOverflow;
+            if (!this.destroyed) this.$refs.queueTrigger.focus();
+        },
+
+        async openMusic() {
+            if (this.destroyed || this.musicOpen || this.settingsOpen || this.queueOpen || this.documentationOpen || this.normalizerOpen) return;
+            this.$refs.musicDialog.showModal();
+            this.errorsOpen = false;
+            this.musicPreviousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.musicOpen = true;
+            await this.refreshMusic();
+            if (this.musicTab === 'organize' && !this.destroyed) this.fetchBeetsStatus();
+        },
+
+        closeMusic() {
+            this.$refs.musicDialog.close();
+        },
+
+        musicClosed() {
+            if (!this.musicOpen) return;
+            this.musicOpen = false;
+            this.musicController?.abort();
+            this.musicRefreshController?.abort();
+            this.musicPreviewController?.abort();
+            this.fetchingMusic = false;
+            this.refreshingMusic = false;
+            this.previewingMusic = false;
+            this.musicDeleteConfirmation = null;
+            document.body.style.overflow = this.musicPreviousOverflow;
+            if (!this.destroyed) this.$refs.musicTrigger.focus();
+        },
+
+        async setMusicTab(tab) {
+            if (this.applyingMusic || this.trashingMusic || !this.musicTabs.some(item => item.id === tab)) return;
+            this.musicTab = tab;
+            this.musicOffset = 0;
+            this.closeMusicEditor();
+            if (tab === 'organize') this.fetchBeetsStatus();
+            else await this.fetchMusicTracks();
+        },
+
+        musicTabKeydown(event) {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || this.applyingMusic || this.trashingMusic) return;
+            event.preventDefault();
+            const current = this.musicTabs.findIndex(tab => tab.id === this.musicTab);
+            const index = event.key === 'Home' ? 0 : event.key === 'End' ? this.musicTabs.length - 1
+                : (current + (event.key === 'ArrowRight' ? 1 : -1) + this.musicTabs.length) % this.musicTabs.length;
+            this.setMusicTab(this.musicTabs[index].id);
+            this.$nextTick(() => document.getElementById(`music-tab-${this.musicTabs[index].id}`).focus());
+        },
+
+        async readMusicResponse(response, fallback) {
+            const data = await response.json();
+            if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : fallback);
+            return data;
+        },
+
+        async refreshMusic() {
+            if (this.destroyed || this.refreshingMusic) return;
+            this.refreshingMusic = true;
+            this.musicRefreshQueued = false;
+            this.musicRefreshError = '';
+            const controller = new AbortController();
+            this.musicRefreshController = controller;
+            try {
+                await this.readMusicResponse(await fetch('/api/music/refresh', { method: 'POST', signal: controller.signal }), 'Nie udało się odświeżyć biblioteki.');
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted && controller === this.musicRefreshController) {
+                    this.musicRefreshError = error.message || 'Nie udało się odświeżyć biblioteki. Ponów próbę.';
+                }
+            } finally {
+                if (controller === this.musicRefreshController) this.refreshingMusic = false;
+            }
+            if (!this.destroyed && !controller.signal.aborted && this.musicOpen && this.musicTab !== 'organize') await this.fetchMusicTracks();
+            if (!this.destroyed && !controller.signal.aborted && this.musicOpen && this.musicRefreshQueued) await this.refreshMusic();
+        },
+
+        async fetchMusicTracks() {
+            if (this.destroyed || !this.musicOpen || this.musicTab === 'organize') return;
+            this.musicController?.abort();
+            const controller = new AbortController();
+            this.musicController = controller;
+            this.fetchingMusic = true;
+            this.musicError = '';
+            const query = new URLSearchParams({ q: this.musicQuery.trim(), incomplete: String(this.musicTab === 'incomplete'), trashed: String(this.musicTab === 'trash'), offset: String(this.musicOffset), limit: String(this.musicLimit) });
+            try {
+                const data = await this.readMusicResponse(await fetch(`/api/music/tracks?${query}`, { signal: controller.signal }), 'Nie udało się pobrać listy utworów.');
+                if (this.destroyed || controller.signal.aborted || controller !== this.musicController) return;
+                if (!Array.isArray(data?.items) || !Number.isInteger(data.total) || data.total < 0) throw new Error('Serwer zwrócił nieprawidłową listę utworów.');
+                this.musicItems = data.items;
+                this.musicTotal = data.total;
+                if (!data.items.length && this.musicOffset > 0) {
+                    this.musicOffset = 0;
+                    if (data.total > 0) await this.fetchMusicTracks();
+                }
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted && controller === this.musicController) {
+                    this.musicItems = [];
+                    this.musicError = error.message || 'Nie udało się pobrać listy utworów. Ponów próbę.';
+                }
+            } finally {
+                if (controller === this.musicController) this.fetchingMusic = false;
+            }
+        },
+
+        async searchMusic() {
+            this.musicOffset = 0;
+            await this.fetchMusicTracks();
+        },
+
+        async changeMusicPage(direction) {
+            if (this.fetchingMusic) return;
+            const offset = this.musicOffset + direction * this.musicLimit;
+            if (offset < 0 || offset >= this.musicTotal) return;
+            this.musicOffset = offset;
+            await this.fetchMusicTracks();
+        },
+
+        get musicRange() {
+            if (!this.musicTotal) return 'Brak utworów';
+            return `${this.musicOffset + 1}–${Math.min(this.musicOffset + this.musicItems.length, this.musicTotal)} z ${this.musicTotal}`;
+        },
+
+        get musicTrackBusy() {
+            return this.applyingMusic || this.trashingMusic || !!this.musicSelectedTrack && Object.values(this.musicPendingEdits).includes(this.musicSelectedTrack.id);
+        },
+
+        musicBrainzSearchUrl(titleOnly = false) {
+            const title = String(this.musicSelectedTrack?.title || '').trim();
+            if (!title) return '';
+            const artist = String(this.musicSelectedTrack?.artist || '').trim();
+            const phrase = value => `"${value.replace(/([+\-!(){}\[\]^"~*?:\\\/&|])/g, '\\$1')}"`;
+            const query = `recording:${phrase(title)}` + (!titleOnly && artist ? ` AND artist:${phrase(artist)}` : '');
+            return 'https://musicbrainz.org/search?' + new URLSearchParams({ type: 'recording', method: 'advanced', query });
+        },
+
+        selectMusicTrack(track) {
+            if (this.applyingMusic || this.trashingMusic) return;
+            this.invalidateMusicPreview();
+            this.musicDeleteConfirmation = null;
+            this.musicTrashError = '';
+            this.musicSelectedTrack = track;
+            this.musicUrl = '';
+            this.musicActionMessage = '';
+            this.$nextTick(() => {
+                this.$refs.musicEditor?.scrollIntoView({ block: 'nearest' });
+                this.$refs.musicEditor?.focus({ preventScroll: true });
+            });
+        },
+
+        closeMusicEditor() {
+            if (this.applyingMusic || this.trashingMusic) return;
+            this.invalidateMusicPreview();
+            this.musicDeleteConfirmation = null;
+            this.musicTrashError = '';
+            this.musicSelectedTrack = null;
+            this.musicUrl = '';
+        },
+
+        requestMusicDelete() {
+            if (this.destroyed || this.musicTab !== 'trash' || this.musicSelectedTrack?.trashed !== true || this.musicTrackBusy || this.previewingMusic) return;
+            this.musicTrashError = '';
+            if (!this.musicSelectedTrack.version) {
+                this.musicTrashError = 'Odśwież bibliotekę i wybierz utwór ponownie, aby potwierdzić aktualną wersję pliku.';
+                return;
+            }
+            this.invalidateMusicPreview();
+            const { id, version, title, artist, relative_path } = this.musicSelectedTrack;
+            const confirmation = { id, version, title, artist, relative_path };
+            this.musicDeleteConfirmation = confirmation;
+            this.$nextTick(() => {
+                if (!this.destroyed && this.musicOpen && this.musicDeleteConfirmation?.id === id && this.musicDeleteConfirmation?.version === version) this.$refs.musicDeleteCancel?.focus();
+            });
+        },
+
+        cancelMusicDelete() {
+            if (this.trashingMusic) return;
+            this.musicDeleteConfirmation = null;
+            this.musicTrashError = '';
+            this.$nextTick(() => {
+                if (!this.destroyed && this.musicOpen && this.musicTab === 'trash' && this.musicSelectedTrack && !this.musicDeleteConfirmation) this.$refs.musicDeleteTrigger?.focus();
+            });
+        },
+
+        async trashMusicTrack() {
+            await this.changeMusicTrashState('trash');
+        },
+
+        async restoreMusicTrack() {
+            await this.changeMusicTrashState('restore');
+        },
+
+        async deleteMusicTrack() {
+            if (!this.musicDeleteConfirmation) return;
+            await this.changeMusicTrashState('delete');
+        },
+
+        async changeMusicTrashState(action) {
+            const track = this.musicSelectedTrack;
+            const statuses = { trash: 'trashed', restore: 'restored', delete: 'deleted' };
+            if (this.destroyed || !track || !statuses[action] || this.musicTrackBusy || this.previewingMusic) return;
+            if (action === 'trash' ? this.musicTab === 'trash' || track.trashed === true : this.musicTab !== 'trash' || track.trashed !== true) return;
+            if (action === 'delete' && (this.musicDeleteConfirmation?.id !== track.id || this.musicDeleteConfirmation?.version !== track.version)) {
+                this.musicDeleteConfirmation = null;
+                this.musicTrashError = 'Utwór zmienił się. Wybierz go ponownie i potwierdź usunięcie z dysku.';
+                return;
+            }
+            if (!track.version) {
+                this.musicTrashError = 'Odśwież bibliotekę i wybierz utwór ponownie, aby potwierdzić aktualną wersję pliku.';
+                return;
+            }
+            this.invalidateMusicPreview();
+            const controller = new AbortController();
+            this.musicTrashController = controller;
+            this.trashingMusic = true;
+            this.musicTrashError = '';
+            try {
+                const body = { version: track.version };
+                if (action === 'delete') body.confirmed = true;
+                const data = await this.readMusicResponse(await fetch(`/api/music/tracks/${encodeURIComponent(track.id)}/${action}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+                    body: JSON.stringify(body)
+                }), 'Nie potwierdzono zmiany. Odśwież listę i sprawdź stan utworu.');
+                if (this.destroyed || controller.signal.aborted) return;
+                if (data?.status !== statuses[action]) throw new Error('Serwer nie potwierdził zmiany. Odśwież listę.');
+                this.trashingMusic = false;
+                this.closeMusicEditor();
+                const messages = { trash: 'Oznaczono utwór jako przeniesiony do kosza. Plik pozostał na dysku.', restore: 'Przywrócono utwór do biblioteki.', delete: 'Usunięto plik z dysku.' };
+                this.musicActionMessage = data.message || messages[action];
+                this.musicItems = this.musicItems.filter(item => item.id !== track.id);
+                await this.fetchMusicTracks();
+                this.$nextTick(() => {
+                    if (!this.destroyed && this.musicOpen && !this.musicSelectedTrack) this.$refs.musicSearch?.focus();
+                });
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted) {
+                    this.musicTrashError = error.message || 'Nie potwierdzono zmiany. Odśwież listę i sprawdź stan utworu.';
+                }
+            } finally {
+                if (controller === this.musicTrashController) {
+                    this.trashingMusic = false;
+                }
+            }
+        },
+
+        invalidateMusicPreview() {
+            this.musicPreviewController?.abort();
+            this.previewingMusic = false;
+            this.musicPreview = null;
+            this.musicChoices = [];
+            this.musicChoiceKey = '';
+            this.musicEditorError = '';
+            this.musicCurrentCoverError = false;
+            this.musicProposedCoverError = false;
+        },
+
+        async previewMusic(action = 'musicbrainz', candidateKey = '') {
+            if (this.destroyed || !this.musicSelectedTrack || this.musicTab === 'trash' || this.musicSelectedTrack.trashed === true || this.musicDeleteConfirmation || this.musicTrackBusy || this.previewingMusic || action !== 'title' && !this.musicUrl.trim()) return;
+            this.musicPreviewController?.abort();
+            const controller = new AbortController();
+            this.musicPreviewController = controller;
+            const trackId = this.musicSelectedTrack.id;
+            this.previewingMusic = true;
+            this.musicPreview = null;
+            this.musicEditorError = '';
+            this.musicActionMessage = '';
+            this.musicCurrentCoverError = false;
+            this.musicProposedCoverError = false;
+            try {
+                const data = await this.readMusicResponse(await fetch(`/api/music/tracks/${encodeURIComponent(trackId)}/preview`, {
+                    method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, url: action === 'title' ? '' : this.musicUrl.trim(), candidate_key: candidateKey })
+                }), 'Nie udało się przygotować podglądu zmiany.');
+                if (this.destroyed || controller.signal.aborted || controller !== this.musicPreviewController || this.musicSelectedTrack?.id !== trackId) return;
+                if (Array.isArray(data?.choices)) {
+                    this.musicChoices = data.choices;
+                    this.musicChoiceKey = '';
+                } else if (typeof data?.preview_token === 'string' && data.proposed && typeof data.destination === 'string') {
+                    this.musicPreview = data;
+                    this.musicChoices = [];
+                    this.musicChoiceKey = '';
+                } else throw new Error('Serwer nie zwrócił dopasowania do porównania.');
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted && controller === this.musicPreviewController) this.musicEditorError = error.message || 'Nie udało się przygotować podglądu zmiany.';
+            } finally {
+                if (controller === this.musicPreviewController) this.previewingMusic = false;
+            }
+        },
+
+        async chooseMusicMatch() {
+            const choice = this.musicChoices.find(item => item.key === this.musicChoiceKey);
+            if (!choice) return;
+            if (choice.kind === 'release' && choice.url) {
+                this.musicUrl = choice.url;
+                await this.previewMusic();
+            } else if (choice.kind === 'track') await this.previewMusic('musicbrainz', choice.key);
+        },
+
+        get musicCurrentCover() {
+            return this.musicPreview?.current?.cover_url || this.musicSelectedTrack?.cover_url || '';
+        },
+
+        get musicProposedCover() {
+            return this.musicPreview?.proposed?.cover_url || this.musicCurrentCover;
+        },
+
+        musicComparisonRows() {
+            if (!this.musicPreview) return [];
+            const current = this.musicPreview.current || this.musicSelectedTrack;
+            return [['title', 'Tytuł'], ['artist', 'Wykonawca'], ['album', 'Album'], ['albumartist', 'Wykonawca albumu'], ['year', 'Rok'], ['track', 'Numer utworu'], ['disc', 'Numer płyty']]
+                .map(([key, label]) => ({ key, label, current: current?.[key] || '—', proposed: this.musicPreview.proposed[key] || '—' }));
+        },
+
+        async applyMusicPreview() {
+            if (this.destroyed || !this.musicSelectedTrack || this.musicTab === 'trash' || this.musicSelectedTrack.trashed === true || this.musicDeleteConfirmation || !this.musicPreview || this.musicTrackBusy || this.previewingMusic) return;
+            const controller = new AbortController();
+            this.musicApplyController = controller;
+            const trackId = this.musicSelectedTrack.id;
+            this.applyingMusic = true;
+            this.musicEditorError = '';
+            try {
+                const data = await this.readMusicResponse(await fetch(`/api/music/tracks/${encodeURIComponent(trackId)}/apply`, {
+                    method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ preview_token: this.musicPreview.preview_token, navi_account_id: this.selectedNaviAccount, navi_sync: this.naviSync })
+                }), 'Nie udało się zlecić zmiany.');
+                if (this.destroyed || controller.signal.aborted) return;
+                if (typeof data?.task_id !== 'string' || !data.task_id) throw new Error('Serwer nie potwierdził dodania zadania.');
+                this.musicPendingEdits[data.task_id] = trackId;
+                this.musicPreview = null;
+                this.musicActionMessage = data.message || 'Dodano zmianę do kolejki. Postęp znajdziesz w widżecie kolejki.';
+                this.statusMsg = this.musicActionMessage;
+                this.statusError = false;
+                this.connectLogs(data.task_id);
+                this.fetchJobs();
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted) this.musicEditorError = error.message || 'Nie udało się zlecić zmiany.';
+            } finally {
+                if (controller === this.musicApplyController) this.applyingMusic = false;
+            }
+        },
+
+        trackMusicJobs(jobs) {
+            let completed = false;
+            for (const job of jobs) {
+                const previous = this.musicJobStates[job.id];
+                if (job.status === 'done' && previous !== 'done' && (previous !== undefined || this.musicPendingEdits[job.id])) completed = true;
+                if (this.musicPendingEdits[job.id] && ['done', 'failed', 'needs_review', 'cancelled'].includes(job.status)) {
+                    if (this.musicSelectedTrack?.id === this.musicPendingEdits[job.id]) {
+                        if (job.status === 'done') this.closeMusicEditor();
+                        this.musicActionMessage = job.status === 'done' ? 'Zmiana została zapisana.' : 'Zmiana wymaga sprawdzenia. Zobacz szczegóły w kolejce.';
+                    }
+                    delete this.musicPendingEdits[job.id];
+                }
+                this.musicJobStates[job.id] = job.status;
+            }
+            if (completed) this.musicRefreshQueued = true;
+            if (completed && this.musicOpen && !this.refreshingMusic) this.refreshMusic();
         },
         
         saveSettings() {
             const settings = {
                 showTitle: this.showTitle,
+                widgetsDocked: this.widgetsDocked,
+                showCommandPreview: this.showCommandPreview,
+                showMetadataButton: this.showMetadataButton,
+                musicColumns: this.musicColumns,
                 themeColor: this.themeColor,
                 bgType: this.bgType,
                 bgPreset: this.bgPreset,
@@ -446,6 +981,10 @@ function appData() {
                 try {
                     const settings = JSON.parse(saved);
                     this.showTitle = settings.showTitle ?? true;
+                    this.widgetsDocked = settings.widgetsDocked === true;
+                    this.musicColumns = [2, 3, 4, 6].includes(Number(settings.musicColumns)) ? Number(settings.musicColumns) : 4;
+                    this.showCommandPreview = settings.showCommandPreview !== false;
+                    this.showMetadataButton = settings.showMetadataButton !== false;
                     this.themeColor = settings.themeColor || '#3b82f6';
                     this.bgType = settings.bgType || 'preset';
                     this.bgPreset = settings.bgPreset || 'dark';
@@ -604,6 +1143,7 @@ function appData() {
                 if (this.flags.save_errors) cmd += `--save-errors ~/spotdl/nadal_brakujace.txt `;
                 if (this.flags.yt_dlp_args) cmd += `--yt-dlp-args "--sleep-interval 2 --max-sleep-interval 4" `;
             } else {
+                cmd += `--output "%(title).60B [%(id)s].%(ext)s" `;
                 if (this.flags.audio_only) cmd += `-x --audio-format mp3 `;
                 if (this.flags.skip_downloaded) cmd += `--no-overwrites `;
             }
@@ -667,7 +1207,10 @@ function appData() {
 
         async showCurrentJobDetails() {
             if (!this.currentJob) return;
+            if (!this.queueOpen) this.openQueue();
+            if (!this.queueOpen) return;
             await this.selectJob(this.currentJob.id);
+            if (!this.queueOpen || this.destroyed) return;
             this.$refs.queueHeading.scrollIntoView({ block: 'start' });
             this.$refs.queueHeading.focus({ preventScroll: true });
         },
@@ -766,6 +1309,7 @@ function appData() {
                 if (!Array.isArray(data.items)) throw new Error('Invalid queue');
                 if (this.destroyed || controller.signal.aborted) return;
                 this.jobs = data.items;
+                this.trackMusicJobs(data.items);
                 this.currentJob = data.current_job || null;
                 this.jobCounts = data.counts || {};
                 this.jobsError = '';
@@ -979,7 +1523,7 @@ function appData() {
         },
 
         async fetchNormalizer(force = false) {
-            if (this.destroyed || (this.fetchingNormalizer && !force)) return;
+            if (this.destroyed || this.savingNormalizerSettings || (this.fetchingNormalizer && !force)) return;
             if (force) this.normalizerController?.abort();
             const controller = new AbortController();
             this.normalizerController = controller;
@@ -1007,6 +1551,47 @@ function appData() {
                     this.normalizerController = null;
                 }
             }
+        },
+
+        async setNormalizerEnabled(enabled) {
+            if (!this.canSetNormalizerEnabled || typeof enabled !== 'boolean' || enabled === this.normalizerStatus.enabled) return;
+            this.savingNormalizerSettings = true;
+            this.normalizerSettingsError = '';
+            this.normalizerSettingsMessage = '';
+            // An older status read must never overwrite the newly confirmed setting.
+            this.normalizerController?.abort();
+            this.normalizerController = null;
+            this.fetchingNormalizer = false;
+            const controller = new AbortController();
+            this.normalizerSettingsController = controller;
+            let refresh = false;
+            try {
+                const response = await fetch('/api/normalizer/settings', {
+                    method: 'PUT', signal: controller.signal,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                const data = await response.json();
+                if (this.destroyed || controller.signal.aborted) return;
+                if (!response.ok || typeof data?.enabled !== 'boolean') {
+                    throw new Error(typeof data?.detail === 'string' ? data.detail : 'Nie udało się potwierdzić ustawienia. Odśwież stan i spróbuj ponownie.');
+                }
+                this.normalizerStatus.enabled = data.enabled;
+                this.normalizerSettingsMessage = data.enabled
+                    ? 'Włączono ReplayGain po imporcie dla wszystkich użytkowników.'
+                    : 'Wyłączono ReplayGain po imporcie dla wszystkich użytkowników.';
+            } catch (error) {
+                if (!this.destroyed && !controller.signal.aborted) {
+                    this.normalizerSettingsError = error instanceof TypeError
+                        ? 'Nie udało się połączyć z serwerem. Sprawdź odświeżony stan przed ponowieniem.'
+                        : error.message || 'Nie udało się zapisać ustawienia. Odśwież stan i spróbuj ponownie.';
+                    refresh = true;
+                }
+            } finally {
+                this.savingNormalizerSettings = false;
+                this.normalizerSettingsController = null;
+            }
+            if (refresh) await this.fetchNormalizer(true);
         },
 
         async runNormalizer(operation) {
@@ -1059,12 +1644,14 @@ function appData() {
                     await this.fetchBeetsReview();
                 } else {
                     this.beetsReviewItems = [];
+                    this.beetsCandidateSelections = {};
                     this.beetsReviewError = '';
                 }
             } catch (error) {
                 this.beetsStatus = null;
                 this.beetsStatusError = 'Nie udało się sprawdzić stanu. Odśwież, aby spróbować ponownie.';
                 this.beetsReviewItems = [];
+                this.beetsCandidateSelections = {};
                 this.beetsReviewError = 'Lista będzie dostępna po przywróceniu połączenia z serwerem.';
             } finally {
                 this.fetchingBeets = false;
@@ -1082,18 +1669,25 @@ function appData() {
                 this.beetsReviewItems = data.items.filter(item => item && typeof item.id === 'string'
                     && !(item.imported && item.metadata_confirmed && item.release_confirmed
                         && !item.artwork_pending && !item.source_changed));
+                this.beetsCandidateSelections = Object.fromEntries(this.beetsReviewItems
+                    .filter(item => this.beetsSelectedCandidate(item))
+                    .map(item => [item.id, this.beetsCandidateSelections[item.id]]));
                 this.beetsReviewError = '';
             } catch (error) {
                 this.beetsReviewItems = [];
+                this.beetsCandidateSelections = {};
                 this.beetsReviewError = 'Nie udało się wczytać listy. Odśwież stan, aby spróbować ponownie.';
             } finally {
                 this.fetchingBeetsReview = false;
             }
         },
 
-        async importBeets(retry = false, reviewId = null) {
+        async importBeets(retry = false, reviewId = null, candidateKey = null) {
             if (!this.canImportBeets) return;
             if (reviewId !== null && !this.beetsReviewItems.some(item => item.id === reviewId)) return;
+            if (candidateKey !== null && !this.beetsReviewItems.some(item => item.id === reviewId
+                && (item.candidates || []).some(candidate => this.beetsCandidateSelectable(candidate)
+                    && candidate.selection_key === candidateKey))) return;
             this.importingBeets = true;
             this.retryingBeetsReviewId = reviewId;
             this.beetsImportError = '';
@@ -1101,9 +1695,10 @@ function appData() {
             this.statusError = false;
             try {
                 const url = reviewId === null ? '/api/beets/import'
-                    : `/api/beets/review/${encodeURIComponent(reviewId)}/retry`;
+                    : `/api/beets/review/${encodeURIComponent(reviewId)}/${candidateKey === null ? 'retry' : 'select'}`;
                 const payload = { navi_sync: this.naviSync, navi_account_id: this.selectedNaviAccount };
                 if (reviewId === null) payload.retry = retry;
+                if (candidateKey !== null) payload.candidate_key = candidateKey;
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1114,6 +1709,7 @@ function appData() {
                     throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się rozpocząć importu.');
                 }
                 this.statusMsg = data.message || 'Rozpoczęto import nowych plików.';
+                if (candidateKey !== null) delete this.beetsCandidateSelections[reviewId];
                 this.connectLogs(data.task_id);
                 this.fetchJobs();
                 this.fetchBeetsStatus();

@@ -10,26 +10,55 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
-    <style>
-        /* Base Checkbox style fixes for white theme visibility */
-        .custom-toggle {
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
-        }
-    </style>
 </head>
-<body class="min-h-screen text-white font-sans overflow-x-hidden flex flex-col items-center justify-center transition-colors duration-500 py-12" x-data="appData()" x-init="initApp()">
+<body class="min-h-screen text-white font-sans overflow-x-hidden flex flex-col items-center justify-center transition-colors duration-500 py-12" :class="{ 'widgets-docked': widgetsDocked }" x-data="appData()" x-init="initApp()">
 
     <!-- Dynamic Background -->
     <div class="fixed inset-0 -z-20 bg-cover bg-center transition-all duration-700" :style="getBackgroundStyle() + `; filter: blur(${blurAmount}px); transform: scale(1.1);`"></div>
     <div class="fixed inset-0 -z-10 bg-neutral-900/10"></div> <!-- Slight overlay for readability -->
 
-    <button type="button" x-ref="documentationTrigger" @click="openDocumentation()"
-            class="documentation-trigger fixed top-6 left-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10"
-            aria-label="Otwórz dokumentację Downloadeusza" title="README, ostatnia wersja i instrukcja"
-            aria-haspopup="dialog" aria-controls="documentation-dialog" :aria-expanded="documentationOpen">
-        <i class="ph ph-book-open text-2xl" aria-hidden="true"></i>
-    </button>
+    <nav class="widget-launchers" :class="widgetsDocked ? 'widget-launchers--docked bento-box' : ''" aria-label="Widżety Downloadeusza">
+        <button type="button" x-ref="musicTrigger" @click="openMusic()"
+                aria-label="Otwórz bibliotekę i porządkowanie muzyki" title="Muzyka · biblioteka i porządkowanie"
+                aria-haspopup="dialog" aria-controls="music-dialog" :aria-expanded="musicOpen"
+                class="music-trigger fixed top-[10.5rem] right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10">
+            <i class="ph ph-music-notes text-2xl" aria-hidden="true"></i>
+        </button>
+
+        <button type="button" x-ref="documentationTrigger" @click="openDocumentation()" x-show="!errorsOpen || errorsList.length === 0"
+                class="documentation-trigger fixed top-6 left-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10"
+                aria-label="Otwórz dokumentację Downloadeusza" title="README, ostatnia wersja i instrukcja"
+                aria-haspopup="dialog" aria-controls="documentation-dialog" :aria-expanded="documentationOpen">
+            <i class="ph ph-book-open text-2xl" aria-hidden="true"></i>
+        </button>
+
+        <button type="button" x-ref="normalizerTrigger" @click="openNormalizer()" x-show="!errorsOpen || errorsList.length === 0"
+                class="normalizer-trigger fixed top-24 left-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10"
+                aria-label="Otwórz panel Normalizeusza" title="Normalizeusz · głośność i albumy"
+                aria-haspopup="dialog" aria-controls="normalizer-dialog" :aria-expanded="normalizerOpen">
+            <i class="ph ph-waveform text-2xl" aria-hidden="true"></i>
+        </button>
+
+        <button type="button" x-ref="queueTrigger" @click="openQueue()"
+                aria-label="Otwórz kolejkę zadań" title="Kolejka zadań i postęp" aria-haspopup="dialog"
+                aria-controls="queue-dialog" :aria-expanded="queueOpen"
+                class="queue-trigger fixed top-24 right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md shadow-lg border border-white/10">
+            <i class="ph ph-list-bullets text-2xl" aria-hidden="true"></i>
+        </button>
+
+        <button type="button" x-show="errorsList.length > 0 && !errorsOpen" @click="errorsOpen = true" aria-label="Pokaż błędy" title="Błędy aplikacji" class="errors-trigger fixed top-[10.5rem] left-6 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md transition-all shadow-lg border border-red-500/30 group" style="display: none;">
+            <i class="ph ph-warning-circle text-2xl text-red-400 group-hover:scale-110 transition-transform" aria-hidden="true"></i>
+            <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping" aria-hidden="true"></span>
+            <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full" aria-hidden="true"></span>
+        </button>
+
+        <button type="button" x-ref="settingsTrigger" @click="openSettings()"
+                aria-label="Otwórz ustawienia" title="Ustawienia" aria-haspopup="dialog"
+                aria-controls="settings-dialog" :aria-expanded="settingsOpen"
+                class="settings-trigger fixed top-6 right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md transition-all shadow-lg border border-white/10 group">
+            <i class="ph ph-gear text-2xl group-hover:rotate-90 transition-transform duration-300" aria-hidden="true"></i>
+        </button>
+    </nav>
 
     <dialog id="documentation-dialog" x-ref="documentationDialog" class="documentation-dialog"
             aria-labelledby="documentation-heading" @close="documentationClosed()"
@@ -63,44 +92,618 @@
         </div>
     </dialog>
 
-    <!-- Settings Gear Icon -->
-    <button @click="toggleSettings()" class="fixed top-6 right-6 z-50 p-3 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md transition-all shadow-lg border border-white/10 group">
-        <i class="ph ph-gear text-2xl group-hover:rotate-90 transition-transform duration-300"></i>
-    </button>
+    <dialog id="normalizer-dialog" x-ref="normalizerDialog" class="documentation-dialog normalizer-dialog"
+            aria-labelledby="normalizer-heading" @close="normalizerClosed()"
+            @click="if ($event.target === $el) closeNormalizer()">
+        <div class="documentation-shell">
+            <header class="documentation-header normalizer-header">
+                <h2 id="normalizer-heading">Normalizeusz · głośność i albumy</h2>
+                <button type="button" @click="closeNormalizer()" class="documentation-close" aria-label="Zamknij Normalizeusza" autofocus>
+                    <i class="ph ph-x text-xl" aria-hidden="true"></i>
+                </button>
+            </header>
+            <section class="normalizer-panel custom-scrollbar" aria-label="Sterowanie i zadania Normalizeusza">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="normalizerStatusText"></p>
+                    </div>
+                    <button type="button" @click="fetchNormalizer()" :disabled="fetchingNormalizer || savingNormalizerSettings" class="normalizer-action self-start">
+                        <i class="ph ph-arrow-clockwise text-sm" aria-hidden="true"></i>
+                        <span x-text="fetchingNormalizer ? 'Odświeżanie…' : 'Odśwież stan'"></span>
+                    </button>
+                </div>
+                <button type="button" role="switch" aria-labelledby="normalizer-setting-label"
+                        aria-describedby="normalizer-setting-help"
+                        :aria-checked="normalizerStatus?.enabled ? 'true' : 'false'"
+                        :aria-busy="savingNormalizerSettings ? 'true' : 'false'"
+                        :disabled="!canSetNormalizerEnabled"
+                        @click="setNormalizerEnabled(!normalizerStatus.enabled)"
+                        :style="`--normalizer-accent: ${getEffectiveColor()}`"
+                        class="normalizer-action normalizer-setting mt-4">
+                    <span class="min-w-0">
+                        <span id="normalizer-setting-label">ReplayGain po imporcie</span>
+                        <span class="block text-xs font-normal text-white/75" aria-hidden="true"
+                              x-text="savingNormalizerSettings ? 'Zapisywanie…' : !normalizerStatus || normalizerError ? 'Stan nieznany' : normalizerStatus.enabled ? 'Włączony' : 'Wyłączony'"></span>
+                    </span>
+                    <span class="normalizer-setting-track" aria-hidden="true"></span>
+                </button>
+                <p id="normalizer-setting-help" class="mt-2 text-xs leading-relaxed text-white/75">Ustawienie wspólne dla wszystkich użytkowników, zapamiętywane na serwerze. Zmienia automatyczną współpracę przy kolejnym sprawdzeniu zadania, bez restartu Downloadeusza. Nie zatrzymuje Normalizeusza ani już wysłanych zleceń; ręczne akcje poniżej pozostają niezależne.</p>
+                <p x-show="normalizerSettingsMessage" role="status" class="mt-2 text-xs text-white/90" x-text="normalizerSettingsMessage" style="display: none;"></p>
+                <p x-show="normalizerSettingsError" role="alert" class="mt-2 text-xs text-amber-200" x-text="normalizerSettingsError" style="display: none;"></p>
+                <p class="mt-3 text-xs leading-relaxed text-white/75">Osobna usługa zapisuje tagi ReplayGain. Sprawdzenie biblioteki pomija pliki, które już mają te tagi.</p>
+                <p x-show="normalizerStatus?.message" class="mt-2 text-xs text-white/85" x-text="normalizerStatus?.message" style="display: none;"></p>
+                <p x-show="normalizerStatus?.available && ['scan_library', 'preview_albums', 'repair_albums'].some(operation => !normalizerStatus.capabilities.includes(operation))" class="mt-2 text-xs text-white/75" style="display: none;">Niektóre akcje wymagają nowszej wersji Normalizeusza. Zaktualizuj jego osobny kontener, aby je udostępnić.</p>
+                <p x-show="normalizerError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerError" style="display: none;"></p>
 
-    <!-- Settings Widget (Slide over) -->
-    <div x-show="settingsOpen" 
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 translate-x-full"
-         x-transition:enter-end="opacity-100 translate-x-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-x-0"
-         x-transition:leave-end="opacity-0 translate-x-full"
-         class="fixed top-0 right-0 h-full w-full sm:w-2/5 max-w-md bg-neutral-900/90 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-40 p-8 overflow-y-auto custom-scrollbar"
-         style="display: none;">
-         
-         <div class="flex justify-between items-center mb-8 mt-12 sm:mt-0">
-             <h2 class="text-2xl font-bold tracking-tight">Ustawienia</h2>
-             <button @click="toggleSettings()" class="p-2 rounded-full hover:bg-white/10"><i class="ph ph-x text-xl"></i></button>
-         </div>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <button type="button" @click="runNormalizer('scan_library')" :disabled="!canRunNormalizer('scan_library')" class="normalizer-action">
+                        <i class="ph ph-waveform text-sm" aria-hidden="true"></i>
+                        <span x-text="submittingNormalizer === 'scan_library' ? 'Dodawanie zadania…' : 'Sprawdź ReplayGain całej biblioteki'"></span>
+                    </button>
+                </div>
+                <p class="mt-4 text-xs leading-relaxed text-white/75">Puste albumy można uzupełnić tytułem utworu. Zmienią się wyłącznie tagi; nazwy i położenie plików pozostaną takie same. Pliki bez tytułu zostaną pominięte.</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button type="button" @click="runNormalizer('preview_albums')" :disabled="!canRunNormalizer('preview_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
+                        <span x-text="submittingNormalizer === 'preview_albums' ? 'Dodawanie zadania…' : 'Sprawdź brakujące albumy'"></span>
+                    </button>
+                    <button type="button" @click="runNormalizer('repair_albums')" :disabled="!canRunNormalizer('repair_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
+                        <span x-text="submittingNormalizer === 'repair_albums' ? 'Dodawanie zadania…' : 'Uzupełnij puste albumy'"></span>
+                    </button>
+                </div>
+                <p id="normalizer-album-help" class="mt-2 text-xs leading-relaxed text-white/75">Najpierw sprawdź brakujące albumy bez zapisywania zmian. Uzupełnianie będzie dostępne po zakończeniu sprawdzenia, jeśli znaleziono pliki do poprawy. Przed kolejnym uzupełnianiem sprawdź je ponownie.</p>
+                <p x-show="normalizerAlbumPreview?.status === 'done'" class="mt-2 text-xs text-white/90 normalizer-counts" style="display: none;" x-text="normalizerAlbumPreview ? `Ostatnie sprawdzenie albumów · ${normalizerProgressText(normalizerAlbumPreview)}` : ''"></p>
+                <p x-show="selectedNaviAccount" class="mt-2 text-xs text-white/75" style="display: none;">Wybrane konto Navidrome zostanie przeskanowane po zmianach.</p>
+                <p x-show="normalizerActionMessage" role="status" class="mt-3 text-sm text-white/90" x-text="normalizerActionMessage" style="display: none;"></p>
+                <p x-show="normalizerActionError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerActionError" style="display: none;"></p>
+
+                <details class="mt-4 border-t border-white/10 pt-3" :open="normalizerRequests.some(request => ['pending', 'processing', 'failed'].includes(request.status))">
+                    <summary class="normalizer-summary text-sm font-semibold text-white/90">Zadania Normalizeusza <span class="font-normal text-white/75" x-text="`(${normalizerRequests.length})`"></span></summary>
+                    <p x-show="normalizerStatus && normalizerRequests.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak zadań. Wybierz sprawdzenie albumów lub ReplayGain biblioteki.</p>
+                    <ol class="mt-3 max-h-96 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania Normalizeusza">
+                        <template x-for="(request, index) in normalizerRequests" :key="request.id">
+                            <li class="py-3 first:pt-0 last:pb-0">
+                                <details :open="index === 0 || request.status === 'processing' || request.status === 'pending'">
+                                    <summary class="normalizer-summary text-xs leading-relaxed text-white/90">
+                                        <span class="font-semibold" x-text="normalizerOperationText(request.operation)"></span>
+                                        <span class="text-white/75" x-text="` · ${normalizerRequestStatus(request)}`"></span>
+                                    </summary>
+                                    <p class="mt-2 text-xs leading-relaxed text-white/85 normalizer-counts" x-text="normalizerProgressText(request)"></p>
+                                    <p x-show="request.progress?.current_path" class="mt-2 text-xs text-white/75" x-text="request.progress?.current_path" style="display: none;"></p>
+                                    <p x-show="request.error" class="mt-2 text-xs text-amber-200" x-text="request.error" style="display: none;"></p>
+                                    <div x-show="normalizerSamples(request).length" class="mt-3" style="display: none;">
+                                        <p class="text-xs font-medium text-white/85">Przykłady plików · maksymalnie 5</p>
+                                        <ul class="mt-1 space-y-2 text-xs text-white/75">
+                                            <template x-for="(sample, sampleIndex) in normalizerSamples(request)" :key="sampleIndex">
+                                                <li>
+                                                    <p x-text="sample.path"></p>
+                                                    <p x-show="sample.album" x-text="`Album: ${sample.album}`" style="display: none;"></p>
+                                                </li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                    <div x-show="normalizerSamples(request, true).length" class="mt-3" style="display: none;">
+                                        <p class="text-xs font-medium text-amber-200">Błędy plików · maksymalnie 5</p>
+                                        <ul class="mt-1 space-y-2 text-xs text-amber-200">
+                                            <template x-for="(sample, sampleIndex) in normalizerSamples(request, true)" :key="sampleIndex">
+                                                <li><p x-text="sample.path"></p><p x-text="sample.error"></p></li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                    <button type="button" x-show="request.status === 'failed'" @click="runNormalizer(request.operation)" :disabled="!canRunNormalizer(request.operation)"
+                                            :aria-label="`Ponów: ${normalizerOperationText(request.operation)}`" class="normalizer-action mt-3" style="display: none;">Ponów zadanie</button>
+                                </details>
+                            </li>
+                        </template>
+                    </ol>
+                </details>
+            </section>
+        </div>
+    </dialog>
+
+    <dialog id="queue-dialog" x-ref="queueDialog" class="documentation-dialog queue-dialog"
+            aria-labelledby="queue-dialog-heading" @close="queueClosed()"
+            @click="if ($event.target === $el) closeQueue()">
+        <div class="documentation-shell">
+            <header class="documentation-header">
+                <h2 id="queue-dialog-heading">Kolejka i postęp</h2>
+                <button type="button" @click="closeQueue()" class="documentation-close" aria-label="Zamknij kolejkę" autofocus>
+                    <i class="ph ph-x text-xl" aria-hidden="true"></i>
+                </button>
+            </header>
+            <div class="queue-panel custom-scrollbar">
+                <section aria-labelledby="current-task-heading" x-show="currentJob" class="current-task pb-6 mb-6 border-b border-white/10" style="display: none;">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <h2 id="current-task-heading" class="text-sm font-semibold text-white/95">Aktualne zadanie</h2>
+                            <p class="mt-1 text-sm font-medium text-white/90 break-words" x-text="currentJob ? jobTitle(currentJob) : ''"></p>
+                        </div>
+                        <button type="button" @click="showCurrentJobDetails()"
+                                class="shrink-0 min-h-11 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Pokaż szczegóły</button>
+                    </div>
+                    <p class="mt-3 text-sm font-medium text-white/95" role="status" aria-live="polite" x-text="currentJob ? jobStatusText(currentJob) : ''"></p>
+                    <p x-show="currentTaskTrackText" class="mt-2 text-sm text-white/90 break-words" x-text="currentTaskTrackText"></p>
+                    <p x-show="currentTaskTrackPosition" class="mt-1 text-xs text-white/75 tabular-nums" x-text="currentTaskTrackPosition"></p>
+                    <div x-show="currentTaskSearch" class="current-task-search mt-3" style="display: none;">
+                        <p class="text-xs text-white/80">Zapytanie wyszukiwania <span x-show="currentTaskSearch?.attempt && currentTaskSearch?.total" class="tabular-nums" x-text="currentTaskSearch ? `· próba ${currentTaskSearch.attempt} z ${currentTaskSearch.total}` : ''"></span></p>
+                        <p class="mt-1 text-sm text-white/95 break-words" x-text="currentTaskSearch?.query || ''"></p>
+                    </div>
+                    <p x-show="currentTaskProgress" class="mt-3 text-xs text-white/85 tabular-nums" x-text="currentTaskProgress"></p>
+                    <p x-show="currentTaskIssues" class="mt-1 text-xs text-amber-200" x-text="currentTaskIssues"></p>
+                    <p x-show="currentTaskRetryText" class="mt-2 text-xs text-white/80 tabular-nums" x-text="currentTaskRetryText"></p>
+                    <p x-show="currentJob?.error" class="mt-2 text-xs text-amber-200 break-words" x-text="currentJob?.error || ''"></p>
+                </section>
+
+                <section aria-labelledby="queue-heading" class="w-full">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 id="queue-heading" x-ref="queueHeading" tabindex="-1" class="text-sm font-semibold text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Kolejka zadań</h2>
+                            <p class="mt-1 text-xs text-white/80" role="status" aria-live="polite" x-text="queueSummary"></p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="cancelJobs()" :disabled="!canCancelJobs" :aria-busy="cancellingJobs === '*'"
+                                    title="Zatrzymaj wszystkie aktywne zadania; zachowaj pobrane pliki"
+                                    class="min-h-10 px-3 py-2 text-xs font-semibold rounded-lg text-white/95 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                <span x-text="cancellingJobs === '*' ? 'Zatrzymywanie…' : 'Zatrzymaj wszystko'"></span>
+                            </button>
+                            <button type="button" @click="fetchJobs()" :disabled="fetchingJobs" aria-label="Odśwież kolejkę"
+                                    class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/90 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-xs leading-relaxed text-white/75">Zadania działają w tle. Możesz zamknąć stronę i wrócić, aby sprawdzić postęp.</p>
+                    <p x-show="jobsError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsError" style="display: none;"></p>
+                    <p x-show="jobsActionError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsActionError" style="display: none;"></p>
+                    <p x-show="jobsActionMessage" role="status" aria-live="polite" class="mt-3 text-xs text-white/85 break-words" x-text="jobsActionMessage" style="display: none;"></p>
+                    <p x-show="!fetchingJobs && !jobsError && jobs.length === 0" class="mt-4 text-sm text-white/80" style="display: none;">Wklej link i dodaj muzykę do kolejki.</p>
+                    <ul class="mt-4 max-h-64 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania">
+                        <template x-for="job in jobs" :key="job.id">
+                            <li class="py-3 first:pt-0 last:pb-0">
+                                <div class="flex items-start gap-3">
+                                    <button type="button" @click="selectJob(job.id)" :aria-pressed="activeJobId === job.id"
+                                            class="flex-1 min-w-0 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                        <span class="block text-sm font-medium break-words" :class="activeJobId === job.id ? 'text-white underline underline-offset-4' : 'text-white/85 hover:text-white'" x-text="jobTitle(job)"></span>
+                                        <span class="mt-1 block text-xs" :class="['failed', 'needs_review'].includes(job.status) ? 'text-amber-200' : 'text-white/80'" x-text="jobStatusText(job)"></span>
+                                        <span class="mt-1 block text-xs text-white/75 tabular-nums" x-text="jobTime(job)"></span>
+                                    </button>
+                                    <button type="button" x-show="jobCanRetry(job)" @click="retryJob(job)" :disabled="retryingJobId !== null || cancellingJobs !== ''"
+                                            :aria-label="`Ponów zadanie: ${jobTitle(job)}`"
+                                            class="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
+                                        <span x-text="retryingJobId === job.id ? 'Dodawanie…' : 'Ponów'"></span>
+                                    </button>
+                                    <button type="button" x-show="jobIsActive(job)" @click="cancelJobs(job)"
+                                            :disabled="cancellingJobs !== '' || retryingJobId !== null" :aria-busy="cancellingJobs === job.id"
+                                            :aria-label="`Zatrzymaj zadanie: ${jobTitle(job)}`" title="Zatrzymaj zadanie; zachowaj pobrane pliki"
+                                            class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
+                                        <i class="ph ph-trash" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <p x-show="job.error" class="mt-2 text-xs leading-relaxed text-amber-200 break-words" x-text="job.error" style="display: none;"></p>
+                            </li>
+                        </template>
+                    </ul>
+                    <p x-show="jobDetailsError" role="status" class="mt-3 text-xs text-amber-200" x-text="jobDetailsError" style="display: none;"></p>
+                    <div x-show="jobDetails && jobTracksTotal > 0" :aria-busy="fetchingJobDetails" class="mt-4 border-t border-white/10 pt-4" style="display: none;">
+                        <h3 class="text-xs font-semibold text-white/90" x-text="jobDetails ? `Postęp utworów · ${jobTitle(jobDetails)}` : 'Postęp utworów'"></h3>
+                        <p id="job-track-range" class="mt-1 text-xs text-white/80 tabular-nums" role="status" aria-live="polite" x-text="jobTrackRange"></p>
+                        <ul id="job-track-list" class="mt-2 max-h-48 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Postęp utworów wybranego zadania" aria-describedby="job-track-range">
+                            <template x-for="track in visibleJobTracks" :key="track.position">
+                                <li class="py-2 text-xs">
+                                    <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-white/85">
+                                        <span class="break-words min-w-0" x-text="track.title || `Utwór ${track.position + 1}`"></span>
+                                        <span class="shrink-0" x-text="trackStatusText(track)"></span>
+                                    </div>
+                                    <p x-show="track.error" class="mt-1 text-amber-200 break-words" x-text="track.error" style="display: none;"></p>
+                                </li>
+                            </template>
+                        </ul>
+                        <nav x-show="jobTracksTotal > jobTrackLimit" aria-label="Strony utworów" class="mt-3 flex flex-wrap justify-between gap-2" style="display: none;">
+                            <button type="button" @click="changeJobTrackPage(-1)" :disabled="fetchingJobDetails || jobTrackOffset === 0" aria-controls="job-track-list"
+                                    class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Poprzednie utwory</button>
+                            <button type="button" @click="changeJobTrackPage(1)" :disabled="fetchingJobDetails || jobTrackOffset + jobTrackLimit >= jobTracksTotal" aria-controls="job-track-list"
+                                    class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Następne utwory</button>
+                        </nav>
+                    </div>
+                </section>
+
+                <!-- Advanced Console -->
+                <div x-show="logMode === 'advanced'" x-transition class="mt-6 border-t border-white/10 pt-6" style="display: none;">
+                    <div class="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
+                        <span class="text-xs font-mono text-white/50 uppercase tracking-wider flex items-center gap-2">
+                            <i class="ph ph-terminal-window"></i> Terminal na żywo
+                        </span>
+                        <div class="flex gap-1.5">
+                            <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                        </div>
+                    </div>
+
+                    <div id="log-container" class="font-mono text-[11px] text-green-400/90 h-48 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-2">
+                        <template x-for="(log, index) in logs" :key="index">
+                            <div x-text="log" class="break-words"></div>
+                        </template>
+                        <div x-show="logs.length === 0" class="text-white/60 italic">Oczekuję na rozpoczęcie zadania...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="music-dialog" x-ref="musicDialog" class="documentation-dialog music-dialog"
+            aria-labelledby="music-heading" @close="musicClosed()"
+            @click="if ($event.target === $el) closeMusic()"
+            :style="`--documentation-accent: ${getEffectiveColor()}`">
+        <div class="documentation-shell">
+            <header class="documentation-header">
+                <h2 id="music-heading">Muzyka</h2>
+                <button type="button" @click="closeMusic()" class="documentation-close" aria-label="Zamknij muzykę" autofocus>
+                    <i class="ph ph-x text-xl" aria-hidden="true"></i>
+                </button>
+            </header>
+            <div class="documentation-tabs music-tabs" role="tablist" aria-label="Muzyka" @keydown="musicTabKeydown($event)">
+                <template x-for="tab in musicTabs" :key="tab.id">
+                    <button type="button" role="tab" :id="`music-tab-${tab.id}`" aria-controls="music-panel"
+                            :aria-selected="musicTab === tab.id" :tabindex="musicTab === tab.id ? 0 : -1"
+                            :disabled="applyingMusic || trashingMusic" @click="setMusicTab(tab.id)" x-text="tab.label"></button>
+                </template>
+            </div>
+            <section id="music-panel" role="tabpanel" :aria-labelledby="`music-tab-${musicTab}`" class="music-panel custom-scrollbar">
+                <div x-show="musicRefreshError" role="alert" class="mb-4 text-sm text-amber-200" style="display: none;">
+                    <p x-text="musicRefreshError"></p>
+                    <button type="button" @click="refreshMusic()" :disabled="refreshingMusic" class="music-action mt-2">Ponów odświeżanie</button>
+                </div>
+                <div x-show="musicTab !== 'organize'">
+                    <div class="music-toolbar">
+                        <label class="music-search">
+                            <span>Szukaj utworu, albumu lub wykonawcy</span>
+                            <input type="search" x-ref="musicSearch" x-model="musicQuery" @input.debounce.300ms="searchMusic()"
+                                   placeholder="Tytuł, album, wykonawca…" :disabled="applyingMusic || trashingMusic">
+                        </label>
+                        <label class="music-columns">
+                            <span>Utworów w rzędzie</span>
+                            <select x-model.number="musicColumns" @change="saveSettings()">
+                                <option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option>
+                            </select>
+                        </label>
+                        <button type="button" @click="refreshMusic()" :disabled="refreshingMusic || applyingMusic || trashingMusic" class="music-action">
+                            <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
+                            <span x-text="refreshingMusic ? 'Odświeżanie…' : 'Odśwież bibliotekę'"></span>
+                        </button>
+                    </div>
+                    <p x-show="musicTab === 'incomplete'" class="mt-3 text-xs leading-relaxed text-white/75">Utwory z Soulseeka z brakującym lub niepotwierdzonym albumem, również z automatyczną nazwą zastępczą według tytułu utworu. Wybierz utwór, aby uzupełnić dane.</p>
+                    <p x-show="musicTab === 'trash'" class="mt-3 text-xs leading-relaxed text-white/80" style="display: none;">Kosz jest filtrem oznaczonych utworów. Pliki pozostają w swoich folderach. Wybierz utwór, aby go przywrócić albo osobno usunąć z dysku.</p>
+                    <p x-show="musicActionMessage && !musicSelectedTrack" role="status" class="mt-3 text-sm text-white/90" x-text="musicActionMessage" style="display: none;"></p>
+                    <p x-show="refreshingMusic || fetchingMusic" role="status" class="mt-4 text-sm text-white/80" x-text="refreshingMusic ? 'Sprawdzanie plików biblioteki…' : 'Wczytywanie utworów…'"></p>
+                    <div x-show="musicError" role="alert" class="mt-4 text-sm text-amber-200" style="display: none;">
+                        <p x-text="musicError"></p>
+                        <button type="button" @click="fetchMusicTracks()" class="music-action mt-2">Spróbuj ponownie</button>
+                    </div>
+                    <p x-show="!fetchingMusic && !refreshingMusic && !musicError && musicItems.length === 0" class="mt-6 text-sm text-white/80" style="display: none;"
+                       x-text="musicQuery.trim() ? musicTab === 'trash' ? 'Brak utworów w koszu pasujących do wyszukiwania.' : 'Brak utworów pasujących do wyszukiwania.' : musicTab === 'trash' ? 'Kosz jest pusty.' : musicTab === 'incomplete' ? 'Brak utworów wymagających uzupełnienia albumu.' : 'Biblioteka jest pusta. Dodaj muzykę do kolejki lub uruchom import.'"></p>
+                    <div class="music-browser-layout" :class="musicSelectedTrack ? 'has-editor' : ''">
+                        <div class="min-w-0">
+                            <p x-show="musicTotal > 0 && !musicError" role="status" class="my-4 text-xs text-white/75 tabular-nums" x-text="musicRange"></p>
+                            <ul class="music-grid" :style="`--music-columns: ${musicColumns}`" aria-label="Utwory w bibliotece"
+                                :aria-label="musicTab === 'trash' ? 'Utwory w koszu' : 'Utwory w bibliotece'"
+                                :aria-busy="fetchingMusic" x-show="!fetchingMusic && !musicError">
+                                <template x-for="track in musicItems" :key="track.id">
+                                    <li class="min-w-0">
+                                        <button type="button" @click="selectMusicTrack(track)" class="music-track"
+                                                :disabled="applyingMusic || trashingMusic" :aria-pressed="musicSelectedTrack?.id === track.id"
+                                                :title="[track.title, track.artist, track.album].filter(Boolean).join(' · ')">
+                                            <span class="music-cover">
+                                                <i class="ph ph-music-notes" aria-hidden="true"></i>
+                                                <img x-show="track.cover_url" :src="track.cover_url || ''" alt="" loading="lazy"
+                                                     @error="$el.style.visibility = 'hidden'" @load="$el.style.visibility = 'visible'">
+                                            </span>
+                                            <span class="music-track-title" x-text="track.title || 'Bez tytułu'"></span>
+                                            <span class="music-track-artist" x-text="track.artist || 'Nieznany wykonawca'"></span>
+                                            <span class="music-track-album" x-text="track.album || 'Brak albumu'"></span>
+                                            <span x-show="musicTab === 'incomplete'" class="music-track-reason" x-text="track.incomplete_reason || 'Album niepotwierdzony'"></span>
+                                        </button>
+                                    </li>
+                                </template>
+                            </ul>
+                            <nav x-show="musicTotal > musicLimit" aria-label="Strony biblioteki" class="mt-5 flex flex-wrap items-center justify-between gap-3" style="display: none;">
+                                <button type="button" @click="changeMusicPage(-1)" :disabled="fetchingMusic || musicOffset === 0" class="music-action">Poprzednie utwory</button>
+                                <button type="button" @click="changeMusicPage(1)" :disabled="fetchingMusic || musicOffset + musicLimit >= musicTotal" class="music-action">Następne utwory</button>
+                            </nav>
+                        </div>
+                        <aside x-show="musicSelectedTrack" x-ref="musicEditor" tabindex="-1" class="music-editor" aria-labelledby="music-editor-heading" style="display: none;">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <h3 id="music-editor-heading" class="text-base font-semibold text-white" x-text="musicSelectedTrack?.title || 'Uzupełnij dane utworu'"></h3>
+                                    <p class="mt-1 text-sm text-white/80" x-text="musicSelectedTrack?.artist || 'Nieznany wykonawca'"></p>
+                                </div>
+                                <button type="button" @click="closeMusicEditor()" :disabled="applyingMusic || trashingMusic" class="documentation-close" aria-label="Zamknij edycję utworu">
+                                    <i class="ph ph-x text-xl" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <p class="mt-2 text-xs text-white/75 break-words" x-text="musicSelectedTrack?.relative_path || ''"></p>
+                            <div x-show="musicTab !== 'trash' && !musicSelectedTrack?.trashed">
+                            <form @submit.prevent="previewMusic()" class="mt-4">
+                                <label for="musicbrainz-url" class="block text-sm font-medium text-white/90">Link MusicBrainz</label>
+                                <input id="musicbrainz-url" type="text" inputmode="url" x-model="musicUrl" @input="invalidateMusicPreview()"
+                                       :disabled="musicTrackBusy" placeholder="https://musicbrainz.org/release/…"
+                                       aria-describedby="musicbrainz-url-help" class="music-url mt-2">
+                                <p id="musicbrainz-url-help" class="mt-2 text-xs leading-relaxed text-white/75">Wklej link wydania albumu lub nagrania. Jeśli jest kilka możliwości, wskaż konkretne wydanie i utwór przed zapisaniem.</p>
+                                <div x-show="musicBrainzSearchUrl()" class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                                    <a :href="musicBrainzSearchUrl()" target="_blank" rel="noopener noreferrer"
+                                       class="min-h-11 inline-flex items-center gap-1.5 rounded text-white underline underline-offset-4 hover:decoration-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                       aria-label="Szukaj w MusicBrainz — otwiera nową kartę">
+                                        Szukaj w MusicBrainz <i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                                    </a>
+                                    <a :href="musicBrainzSearchUrl(true)" target="_blank" rel="noopener noreferrer"
+                                       class="min-h-11 inline-flex items-center gap-1.5 rounded text-white/85 underline underline-offset-4 hover:text-white hover:decoration-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                       aria-label="Szukaj tylko tytułu w MusicBrainz — otwiera nową kartę">
+                                        Szukaj tylko tytułu <i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                                    </a>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button type="submit" :disabled="musicTrackBusy || previewingMusic || !musicUrl.trim()" class="music-action">
+                                        <span x-text="previewingMusic ? 'Sprawdzanie…' : 'Pokaż dopasowanie'"></span>
+                                    </button>
+                                    <button type="button" @click="previewMusic('title')" :disabled="musicTrackBusy || previewingMusic || !musicSelectedTrack?.title" class="music-action">Nazwij album tytułem piosenki</button>
+                                </div>
+                            </form>
+                            <p x-show="musicTrackBusy && !applyingMusic && !trashingMusic" role="status" class="mt-3 text-xs text-white/85">Zmiana tego utworu czeka w kolejce lub jest zapisywana.</p>
+                            <p x-show="musicEditorError" role="alert" class="mt-3 text-sm text-amber-200" x-text="musicEditorError" style="display: none;"></p>
+                            <p x-show="musicActionMessage" role="status" class="mt-3 text-sm text-white/90" x-text="musicActionMessage" style="display: none;"></p>
+                            <fieldset x-show="musicChoices.length > 0" class="mt-4" style="display: none;">
+                                <legend class="text-sm font-semibold text-white/95">Wybierz właściwe wydanie lub utwór</legend>
+                                <div class="mt-2 max-h-64 overflow-y-auto custom-scrollbar divide-y divide-white/10">
+                                    <template x-for="choice in musicChoices" :key="choice.key">
+                                        <label class="flex min-h-11 items-start gap-3 py-3 text-sm text-white/85 cursor-pointer">
+                                            <input type="radio" name="music-match" x-model="musicChoiceKey" :value="choice.key" :disabled="previewingMusic || musicTrackBusy" class="mt-1 h-4 w-4 shrink-0">
+                                            <span class="min-w-0 break-words" x-text="choice.label"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <button type="button" @click="chooseMusicMatch()" :disabled="!musicChoiceKey || previewingMusic || musicTrackBusy" class="music-action mt-3">Pokaż wybrane dopasowanie</button>
+                            </fieldset>
+                            <div x-show="musicPreview" class="mt-5" style="display: none;">
+                                <h4 class="text-sm font-semibold text-white">Podgląd zmiany</h4>
+                                <div class="music-artwork-comparison mt-3">
+                                    <figure>
+                                        <figcaption class="mb-2 text-xs font-medium text-white/85">Aktualna okładka</figcaption>
+                                        <div class="music-cover">
+                                            <i class="ph ph-music-notes" aria-hidden="true"></i>
+                                            <img x-show="musicCurrentCover && !musicCurrentCoverError" :src="musicCurrentCover || ''" alt=""
+                                                 @error="musicCurrentCoverError = true" @load="musicCurrentCoverError = false">
+                                        </div>
+                                        <p x-show="!musicCurrentCover || musicCurrentCoverError" class="mt-1 text-xs text-white/75" x-text="musicCurrentCoverError ? 'Podgląd niedostępny' : 'Brak okładki'"></p>
+                                    </figure>
+                                    <figure>
+                                        <figcaption class="mb-2 text-xs font-medium text-white/85">Okładka po zmianie</figcaption>
+                                        <div class="music-cover">
+                                            <i class="ph ph-music-notes" aria-hidden="true"></i>
+                                            <img x-show="musicProposedCover && !musicProposedCoverError" :src="musicProposedCover || ''" alt=""
+                                                 @error="musicProposedCoverError = true" @load="musicProposedCoverError = false">
+                                        </div>
+                                        <p x-show="!musicProposedCover || musicProposedCoverError" class="mt-1 text-xs text-white/75" x-text="musicProposedCoverError ? 'Podgląd niedostępny' : 'Brak okładki'"></p>
+                                    </figure>
+                                </div>
+                                <p x-show="musicPreview && !musicPreview.proposed.cover_url && musicCurrentCover" class="mt-2 text-xs text-white/75">Dotychczasowa okładka pozostanie bez zmian.</p>
+                                <table class="music-comparison mt-2">
+                                    <caption class="sr-only">Porównanie aktualnych i proponowanych danych utworu</caption>
+                                    <thead><tr><th scope="col">Pole</th><th scope="col">Obecnie</th><th scope="col">Po zmianie</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="row in musicComparisonRows()" :key="row.key">
+                                            <tr><th scope="row" x-text="row.label"></th><td x-text="row.current"></td><td x-text="row.proposed"></td></tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                                <p class="mt-3 text-xs font-semibold text-white/90">Ścieżka docelowa</p>
+                                <p class="mt-1 text-xs leading-relaxed text-white/80 break-words" x-text="musicPreview?.destination || ''"></p>
+                                <p x-show="musicPreview?.action === 'title'" class="mt-2 text-xs leading-relaxed text-white/75">Nazwa albumu zostanie ustawiona na tytuł utworu jako świadomie wybrana nazwa zastępcza.</p>
+                                <button type="button" @click="applyMusicPreview()" :disabled="applyingMusic || musicTrackBusy || previewingMusic"
+                                        :style="`background-color: ${getEffectiveColor()}; color: ${getTextColor()}`" class="music-action mt-4">
+                                    <span x-text="applyingMusic ? 'Zlecanie zmiany…' : 'Zastosuj dane i uporządkuj plik'"></span>
+                                </button>
+                                <p class="mt-2 text-xs leading-relaxed text-white/75">Zmiana trafi do kolejki. Dotyczy tego jednego utworu i jego pliku w bibliotece; oryginał pobrania pozostanie bez zmian.</p>
+                            </div>
+                            </div>
+                            <section class="mt-5 border-t border-white/15 pt-4" aria-labelledby="music-trash-heading">
+                                <h4 id="music-trash-heading" class="text-sm font-semibold text-white/95">Kosz</h4>
+                                <div x-show="musicTab !== 'trash' && !musicSelectedTrack?.trashed">
+                                    <p class="mt-2 text-xs leading-relaxed text-white/80">Oznaczenie ukryje utwór w Bibliotece i przeniesie go do filtra Kosz. Plik pozostanie w obecnym folderze.</p>
+                                    <button type="button" @click="trashMusicTrack()" :disabled="musicTrackBusy || previewingMusic" class="music-action mt-3">
+                                        <i class="ph ph-trash" aria-hidden="true"></i>
+                                        <span x-text="trashingMusic ? 'Oznaczanie…' : 'Przenieś do kosza'"></span>
+                                    </button>
+                                </div>
+                                <div x-show="musicTab === 'trash' && musicSelectedTrack?.trashed && !musicDeleteConfirmation" class="mt-3" style="display: none;">
+                                    <p class="text-xs leading-relaxed text-white/80">Przywrócenie pokaże utwór ponownie w Bibliotece bez zmiany pliku.</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button type="button" @click="restoreMusicTrack()" :disabled="musicTrackBusy" class="music-action">
+                                            <span x-text="trashingMusic ? 'Przywracanie…' : 'Przywróć'"></span>
+                                        </button>
+                                        <button type="button" x-ref="musicDeleteTrigger" @click="requestMusicDelete()" :disabled="musicTrackBusy" class="music-action">Usuń z dysku</button>
+                                    </div>
+                                </div>
+                                <div x-show="musicTab === 'trash' && musicDeleteConfirmation" role="group" aria-labelledby="music-delete-question" class="mt-3" style="display: none;">
+                                    <p id="music-delete-question" class="text-sm font-semibold text-white">Trwale usunąć ten plik z dysku?</p>
+                                    <p class="mt-2 text-sm text-white break-words" x-text="musicDeleteConfirmation?.title || 'Utwór bez tytułu'"></p>
+                                    <p class="mt-1 text-sm text-white/80 break-words" x-text="musicDeleteConfirmation?.artist || 'Nieznany wykonawca'"></p>
+                                    <p class="mt-1 text-xs text-white/75 break-words" x-text="musicDeleteConfirmation?.relative_path || ''"></p>
+                                    <p class="mt-3 text-xs leading-relaxed text-amber-200">Ta operacja usunie wskazany plik audio z dysku. Nie można jej cofnąć.</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button type="button" x-ref="musicDeleteCancel" @click="cancelMusicDelete()" :disabled="trashingMusic" class="music-action">Anuluj</button>
+                                        <button type="button" @click="deleteMusicTrack()" :disabled="musicTrackBusy" class="music-action">
+                                            <span x-text="trashingMusic ? 'Usuwanie…' : 'Potwierdź usunięcie z dysku'"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p x-show="musicTrashError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="musicTrashError" style="display: none;"></p>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+                <section aria-labelledby="beets-heading" x-show="musicTab === 'organize'" class="music-organize" style="display: none;">
+                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h2 id="beets-heading" class="text-sm font-semibold text-white/95">Porządkowanie muzyki · beets</h2>
+                            <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="beetsStatusText"></p>
+                            <p x-show="beetsScheduleText" class="mt-1 text-xs text-white/75" x-text="beetsScheduleText" style="display: none;"></p>
+                        </div>
+                        <button type="button" @click="fetchBeetsStatus()" :disabled="fetchingBeets"
+                                class="self-start px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <i class="ph text-sm motion-reduce:animate-none" :class="fetchingBeets ? 'ph-spinner animate-spin' : 'ph-arrow-clockwise'" aria-hidden="true"></i>
+                            <span>Odśwież stan</span>
+                        </button>
+                    </div>
+                    <p x-show="beetsStatus?.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Pliki z wystarczającymi tagami trafiają do biblioteki. Rozpoznawanie uzupełnia ich dane i okładki. Oryginały pozostają w folderze pobrań.</p>
+                    <p x-show="beetsStatus && !beetsStatus.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Włącz porządkowanie na serwerze, aby rozpoznawać albumy i uzupełniać okładki.</p>
+                    <p x-show="beetsStatus?.enabled && beetsStatus?.last_error" class="mt-2 text-xs text-amber-200 break-words"
+                       x-text="beetsStatus?.last_error" style="display: none;"></p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button type="button" @click="organizeSlskd()"
+                                :disabled="organizingSlskd || importingBeets || !slskdAccount.configured"
+                                title="Uporządkuj pliki pobrane z Soulseek"
+                                class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="ph ph-spinner animate-spin text-sm" x-show="organizingSlskd" style="display: none;"></i>
+                            <i class="ph ph-folder-notch-open text-sm" x-show="!organizingSlskd"></i>
+                            <span>Uporządkuj pliki</span>
+                        </button>
+                        <button type="button" @click="importBeets()" :disabled="!canImportBeets"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            <i class="ph text-sm motion-reduce:animate-none" :class="importingBeets ? 'ph-spinner animate-spin' : 'ph-folder-notch-open'" aria-hidden="true"></i>
+                            <span x-text="importingBeets ? 'Importowanie…' : 'Importuj nowe pliki'"></span>
+                        </button>
+                        <button type="button" @click="importBeets(true)" :disabled="!canImportBeets"
+                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/85 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                            Ponów rozpoznawanie
+                        </button>
+                    </div>
+                    <p x-show="beetsImportError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="beetsImportError" style="display: none;"></p>
+                    <p x-show="statusMsg" role="status" class="mt-3 text-sm" :class="statusError ? 'text-amber-200' : 'text-white/90'" x-text="statusMsg" style="display: none;"></p>
+                    <details x-show="beetsStatus?.enabled" class="mt-4 border-t border-white/10 pt-3" style="display: none;">
+                        <summary class="cursor-pointer rounded text-sm font-semibold text-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" x-text="beetsReviewSummary"></summary>
+                        <p x-show="beetsReviewError" role="status" class="mt-3 text-xs text-amber-200" x-text="beetsReviewError" style="display: none;"></p>
+                        <p x-show="!beetsReviewError && !fetchingBeetsReview && beetsReviewItems.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak plików wymagających sprawdzenia.</p>
+                        <ul class="mt-3 max-h-96 overflow-y-auto divide-y divide-white/10" aria-label="Pliki wymagające sprawdzenia">
+                            <template x-for="item in beetsReviewItems.slice(0, beetsReviewLimit)" :key="item.id">
+                                <li class="py-3 first:pt-0 last:pb-0">
+                                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-medium text-white/95 break-words" x-text="beetsReviewFilename(item)"></p>
+                                            <p class="mt-1 text-xs text-white/80" x-text="beetsReviewStatus(item)"></p>
+                                        </div>
+                                        <button type="button" @click="importBeets(false, item.id)" :disabled="!canImportBeets"
+                                                :aria-label="`Sprawdź ponownie: ${beetsReviewFilename(item)}`"
+                                                class="self-start shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/90 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                            <span x-text="retryingBeetsReviewId === item.id ? 'W toku…' : 'Sprawdź ponownie'"></span>
+                                        </button>
+                                    </div>
+                                    <p class="mt-2 text-xs leading-relaxed text-white/75 break-words" x-text="item.reason || 'Potrzebne jest ponowne sprawdzenie danych utworu.'"></p>
+                                    <div x-show="Array.isArray(item.candidates) && item.candidates.length > 0" class="mt-2" style="display: none;">
+                                        <p class="text-xs font-medium text-white/85">Propozycje do porównania</p>
+                                        <fieldset class="mt-1 min-w-0" :aria-describedby="`beets-choice-help-${item.id}`">
+                                            <legend class="sr-only" x-text="`Wybierz dopasowanie dla: ${beetsReviewFilename(item)}`"></legend>
+                                            <ul class="divide-y divide-white/10 text-xs leading-relaxed text-white/85">
+                                                <template x-for="(candidate, index) in (Array.isArray(item.candidates) ? item.candidates : []).slice(0, 3)" :key="candidate.selection_key || index">
+                                                    <li class="py-2">
+                                                        <label class="flex min-h-11 items-center gap-3 py-2 cursor-pointer">
+                                                            <input type="radio" :name="`beets-candidate-${item.id}`" :value="candidate.selection_key || ''"
+                                                                   x-model="beetsCandidateSelections[item.id]" :disabled="!canImportBeets || !beetsCandidateSelectable(candidate)"
+                                                                   :aria-label="`Wybierz: ${beetsCandidateText(candidate)}`"
+                                                                   class="h-4 w-4 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                                            <span class="min-w-0 break-words" x-text="beetsCandidateText(candidate)"></span>
+                                                        </label>
+                                                        <p x-show="!beetsCandidateSelectable(candidate)" class="mt-1 text-white/75">Ta propozycja ma tylko skrót danych. Użyj „Sprawdź ponownie”, aby pobrać dopasowania możliwe do wybrania.</p>
+                                                        <details>
+                                                            <summary class="cursor-pointer rounded py-2 break-words focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Szczegóły propozycji</summary>
+                                                            <dl class="my-2 grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-white/80">
+                                                                <template x-for="detail in beetsCandidateDetails(candidate)" :key="detail[0]">
+                                                                    <div class="contents">
+                                                                        <dt class="font-medium" x-text="detail[0]"></dt>
+                                                                        <dd class="min-w-0 break-words" x-text="detail[1]"></dd>
+                                                                    </div>
+                                                                </template>
+                                                            </dl>
+                                                            <a x-show="beetsCandidateUrl(candidate)" :href="beetsCandidateUrl(candidate)" target="_blank" rel="noopener noreferrer"
+                                                               class="inline-block rounded py-2 underline underline-offset-4 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                                               :aria-label="`Otwórz w MusicBrainz (nowa karta): ${beetsCandidateText(candidate)}`">Zobacz w MusicBrainz <span class="sr-only">(nowa karta)</span></a>
+                                                        </details>
+                                                    </li>
+                                                </template>
+                                            </ul>
+                                            <p :id="`beets-choice-help-${item.id}`" class="mt-2 text-xs leading-relaxed text-white/75">Zaznacz kółko przy właściwej propozycji, aby włączyć przycisk zastosowania. Przed wyborem porównaj wersję nagrania i długość w szczegółach. Zastosowanie zmieni tagi kopii w bibliotece lub zaimportuje ten plik. Oryginał w folderze pobrań pozostanie bez zmian.</p>
+                                            <p x-show="beetsSelectedCandidate(item)" class="mt-2 text-xs leading-relaxed text-white/85" role="status"
+                                               x-text="beetsSelectedCandidate(item)?.kind === 'release' ? 'Wybrano nagranie z wydania — jego dane zostaną zastosowane tylko do tego pliku.' : 'Wybrano nagranie — ten wybór nie potwierdza konkretnego wydania albumu.'"></p>
+                                            <button type="button" @click="importBeets(false, item.id, beetsSelectedCandidate(item)?.selection_key)"
+                                                    :disabled="!canImportBeets || !beetsSelectedCandidate(item)"
+                                                    :aria-label="`Zastosuj wybraną propozycję do: ${beetsReviewFilename(item)}`"
+                                                    class="mt-3 min-h-11 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                                                <span x-text="retryingBeetsReviewId === item.id ? 'Zlecanie…' : 'Zastosuj wybraną propozycję'"></span>
+                                            </button>
+                                        </fieldset>
+                                    </div>
+                                </li>
+                            </template>
+                        </ul>
+                        <button type="button" x-show="beetsReviewItems.length > beetsReviewLimit" @click="beetsReviewLimit += 20"
+                                class="mt-3 rounded px-3 py-2 text-xs font-semibold text-white/85 bg-white/5 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                style="display: none;">Pokaż kolejne 20 plików</button>
+                    </details>
+                </section>
+            </section>
+        </div>
+    </dialog>
+
+    <!-- Settings Widget -->
+    <dialog id="settings-dialog" x-ref="settingsDialog" class="documentation-dialog settings-dialog"
+            aria-labelledby="settings-heading" @close="settingsClosed()"
+            @click="if ($event.target === $el) closeSettings()">
+        <div class="documentation-shell">
+         <header class="documentation-header">
+             <h2 id="settings-heading">Ustawienia</h2>
+             <button type="button" @click="closeSettings()" class="documentation-close" aria-label="Zamknij ustawienia" autofocus>
+                 <i class="ph ph-x text-xl" aria-hidden="true"></i>
+             </button>
+         </header>
 
          <!-- Settings Sections -->
-         <div class="space-y-6">
+         <section class="settings-panel custom-scrollbar space-y-6" aria-label="Preferencje i integracje">
              
              <!-- Visibility -->
              <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
                  <h3 class="text-lg font-medium mb-4 text-white/80">Wygląd</h3>
-                 <label class="flex items-center justify-between cursor-pointer">
+                 <label class="toggle-label flex items-center justify-between cursor-pointer">
                      <span class="text-sm">Pokaż tytuł "Downloadeusz"</span>
                      <input type="checkbox" x-model="showTitle" class="sr-only peer">
-                     <div class="w-11 h-6 bg-black/50 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative" :style="showTitle ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                     <div class="custom-toggle" aria-hidden="true" :style="showTitle ? `background-color: ${getEffectiveColor()}` : ''"></div>
                  </label>
+                 <label class="toggle-label justify-between mt-3 text-sm text-white/90">
+                     <span>Widżety w dolnym docku</span>
+                     <input type="checkbox" x-model="widgetsDocked" aria-describedby="widget-dock-help" class="sr-only peer">
+                     <span class="custom-toggle" aria-hidden="true" :style="widgetsDocked ? `background-color: ${getEffectiveColor()}` : ''"></span>
+                 </label>
+                 <p id="widget-dock-help" class="mt-1 text-xs leading-relaxed text-white/75">Zbierz wszystkie widżety w pasku u dołu ekranu. Wyłącz, aby przywrócić przyciski w rogach. Ustawienie zapisuje się w tej przeglądarce.</p>
+             </div>
+
+             <!-- Download Tools Visibility -->
+             <div role="group" aria-labelledby="download-tools-heading" class="bg-black/40 rounded-2xl p-5 border border-white/5">
+                 <h3 id="download-tools-heading" class="text-lg font-medium mb-4 text-white/80">Narzędzia pobierania</h3>
+                 <div class="space-y-3">
+                     <label class="toggle-label justify-between text-sm text-white/90">
+                         <span>Pokaż podgląd komendy pobierania</span>
+                         <input type="checkbox" x-model="showCommandPreview" class="sr-only peer">
+                         <span class="custom-toggle" aria-hidden="true" :style="showCommandPreview ? `background-color: ${getEffectiveColor()}` : ''"></span>
+                     </label>
+                     <label class="toggle-label justify-between text-sm text-white/90">
+                         <span>Pokaż przycisk pobierania samych metadanych Spotify</span>
+                         <input type="checkbox" x-model="showMetadataButton" class="sr-only peer">
+                         <span class="custom-toggle" aria-hidden="true" :style="showMetadataButton ? `background-color: ${getEffectiveColor()}` : ''"></span>
+                     </label>
+                 </div>
              </div>
 
              <!-- Theme Color -->
              <div class="bg-black/40 rounded-2xl p-5 border border-white/5">
                  <h3 class="text-lg font-medium mb-4 text-white/80">Motyw</h3>
-                 <div class="grid grid-cols-8 gap-3">
+                 <div class="grid grid-cols-5 sm:grid-cols-8 gap-3">
                      <template x-for="color in availableColors" :key="color">
                          <button @click="themeColor = color" 
                                  class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shadow-lg"
@@ -184,9 +787,9 @@
                          </div>
                      </div>
 
-                     <label class="flex items-center gap-3 cursor-pointer mt-2 group">
+                     <label class="toggle-label flex items-center gap-3 cursor-pointer mt-2 group">
                          <input type="checkbox" x-model="naviSync" class="sr-only peer">
-                         <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="naviSync ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                         <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="naviSync ? `background-color: ${getEffectiveColor()}` : ''"></div>
                          <span class="text-sm font-medium text-white/80 group-hover:text-white transition-colors">Wymuś skanowanie i usuń .m3u</span>
                      </label>
 
@@ -299,16 +902,9 @@
                  <span class="text-xs font-medium text-white/60 tracking-wider" x-text="appVersion ? `v${appVersion}` : 'Wersja niedostępna'"></span>
              </div>
 
-         </div>
-    </div>
-    
-    <!-- Errors Widget Icon (All devices) -->
-    <button x-show="errorsList.length > 0" @click="errorsOpen = true" aria-label="Pokaż błędy" class="fixed top-24 left-6 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md transition-all shadow-lg border border-red-500/30 group" style="display: none;">
-        <i class="ph ph-warning-circle text-2xl text-red-400 group-hover:scale-110 transition-transform"></i>
-        <!-- Ping indicator -->
-        <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
-        <span class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full"></span>
-    </button>
+         </section>
+        </div>
+    </dialog>
     
     <!-- Errors Overlay -->
     <div x-show="errorsOpen && errorsList.length > 0" @click="errorsOpen = false" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" style="display: none;" x-transition.opacity></div>
@@ -341,11 +937,8 @@
         </button>
     </aside>
 
-    <!-- Settings Overlay -->
-    <div x-show="settingsOpen" @click="toggleSettings()" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" style="display: none;" x-transition.opacity></div>
-
     <!-- Main Content Wrapper -->
-    <div class="flex flex-col w-full max-w-2xl mx-auto gap-8 px-6 items-center justify-center mt-6 xl:mt-12 flex-grow relative z-10">
+    <div class="main-content-layout flex flex-col w-full mx-auto gap-8 items-center justify-center mt-6 xl:mt-12 flex-grow relative z-10">
         
         <!-- Main Content -->
         <main class="w-full">
@@ -451,192 +1044,41 @@
                                     <i class="ph ph-plugs text-sm" x-show="!testingSlskd"></i>
                                     <span>Testuj</span>
                                 </button>
-                                <button @click="organizeSlskd()" 
-                                        :disabled="organizingSlskd || importingBeets || !slskdAccount.configured"
-                                        title="Uporządkuj pliki pobrane z Soulseek"
-                                        class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    <i class="ph ph-spinner animate-spin text-sm" x-show="organizingSlskd" style="display: none;"></i>
-                                    <i class="ph ph-folder-notch-open text-sm" x-show="!organizingSlskd"></i>
-                                    <span>Uporządkuj pliki</span>
-                                </button>
                             </div>
                         </div>
 
                     </div>
                 </div>
 
-                <section aria-labelledby="beets-heading" class="border-t border-white/10 pt-4 mb-6">
-                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <h2 id="beets-heading" class="text-sm font-semibold text-white/95">Porządkowanie muzyki · beets</h2>
-                            <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="beetsStatusText"></p>
-                            <p x-show="beetsScheduleText" class="mt-1 text-xs text-white/75" x-text="beetsScheduleText" style="display: none;"></p>
-                        </div>
-                        <button type="button" @click="fetchBeetsStatus()" :disabled="fetchingBeets"
-                                class="self-start px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                            <i class="ph text-sm motion-reduce:animate-none" :class="fetchingBeets ? 'ph-spinner animate-spin' : 'ph-arrow-clockwise'" aria-hidden="true"></i>
-                            <span>Odśwież stan</span>
-                        </button>
-                    </div>
-                    <p x-show="beetsStatus?.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Pliki z wystarczającymi tagami trafiają do biblioteki. Rozpoznawanie uzupełnia ich dane i okładki. Oryginały pozostają w folderze pobrań.</p>
-                    <p x-show="beetsStatus && !beetsStatus.enabled" class="mt-3 text-xs leading-relaxed text-white/75" style="display: none;">Włącz porządkowanie na serwerze, aby rozpoznawać albumy i uzupełniać okładki.</p>
-                    <p x-show="beetsStatus?.enabled && beetsStatus?.last_error" class="mt-2 text-xs text-amber-200 break-words"
-                       x-text="beetsStatus?.last_error" style="display: none;"></p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button type="button" @click="importBeets()" :disabled="!canImportBeets"
-                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                            <i class="ph text-sm motion-reduce:animate-none" :class="importingBeets ? 'ph-spinner animate-spin' : 'ph-folder-notch-open'" aria-hidden="true"></i>
-                            <span x-text="importingBeets ? 'Importowanie…' : 'Importuj nowe pliki'"></span>
-                        </button>
-                        <button type="button" @click="importBeets(true)" :disabled="!canImportBeets"
-                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/85 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                            Ponów rozpoznawanie
-                        </button>
-                    </div>
-                    <p x-show="beetsImportError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="beetsImportError" style="display: none;"></p>
-                    <details x-show="beetsStatus?.enabled" class="mt-4 border-t border-white/10 pt-3" style="display: none;">
-                        <summary class="cursor-pointer rounded text-sm font-semibold text-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" x-text="beetsReviewSummary"></summary>
-                        <p x-show="beetsReviewError" role="status" class="mt-3 text-xs text-amber-200" x-text="beetsReviewError" style="display: none;"></p>
-                        <p x-show="!beetsReviewError && !fetchingBeetsReview && beetsReviewItems.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak plików wymagających sprawdzenia.</p>
-                        <ul class="mt-3 max-h-96 overflow-y-auto divide-y divide-white/10" aria-label="Pliki wymagające sprawdzenia">
-                            <template x-for="item in beetsReviewItems.slice(0, beetsReviewLimit)" :key="item.id">
-                                <li class="py-3 first:pt-0 last:pb-0">
-                                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-medium text-white/95 break-words" x-text="beetsReviewFilename(item)"></p>
-                                            <p class="mt-1 text-xs text-white/80" x-text="beetsReviewStatus(item)"></p>
-                                        </div>
-                                        <button type="button" @click="importBeets(false, item.id)" :disabled="!canImportBeets"
-                                                :aria-label="`Sprawdź ponownie: ${beetsReviewFilename(item)}`"
-                                                class="self-start shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/15 text-white/90 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                                            <span x-text="retryingBeetsReviewId === item.id ? 'Sprawdzanie…' : 'Sprawdź ponownie'"></span>
-                                        </button>
-                                    </div>
-                                    <p class="mt-2 text-xs leading-relaxed text-white/75 break-words" x-text="item.reason || 'Potrzebne jest ponowne sprawdzenie danych utworu.'"></p>
-                                    <div x-show="Array.isArray(item.candidates) && item.candidates.length > 0" class="mt-2" style="display: none;">
-                                        <p class="text-xs font-medium text-white/85">Propozycje do porównania</p>
-                                        <ul class="mt-1 space-y-1 list-disc pl-4 text-xs leading-relaxed text-white/75">
-                                            <template x-for="(candidate, index) in (Array.isArray(item.candidates) ? item.candidates : []).slice(0, 3)" :key="index">
-                                                <li class="break-words" x-text="beetsCandidateText(candidate)"></li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                </li>
-                            </template>
-                        </ul>
-                        <button type="button" x-show="beetsReviewItems.length > beetsReviewLimit" @click="beetsReviewLimit += 20"
-                                class="mt-3 rounded px-3 py-2 text-xs font-semibold text-white/85 bg-white/5 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                                style="display: none;">Pokaż kolejne 20 plików</button>
-                    </details>
-                </section>
 
-                <section aria-labelledby="normalizer-heading" class="normalizer-panel border-t border-white/10 pt-4 mb-6">
-                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <h2 id="normalizer-heading" class="text-sm font-semibold text-white/95">Normalizeusz · głośność i albumy</h2>
-                            <p class="mt-1 text-sm text-white/85" role="status" aria-live="polite" x-text="normalizerStatusText"></p>
-                            <p x-show="normalizerStatus" class="mt-1 text-xs text-white/75" style="display: none;"
-                               x-text="normalizerStatus?.enabled ? 'ReplayGain po imporcie: włączony' : 'ReplayGain po imporcie: wyłączony'"></p>
-                        </div>
-                        <button type="button" @click="fetchNormalizer()" :disabled="fetchingNormalizer" class="normalizer-action self-start">
-                            <i class="ph ph-arrow-clockwise text-sm" aria-hidden="true"></i>
-                            <span x-text="fetchingNormalizer ? 'Odświeżanie…' : 'Odśwież stan'"></span>
-                        </button>
-                    </div>
-                    <p class="mt-3 text-xs leading-relaxed text-white/75">Osobna usługa zapisuje tagi ReplayGain. Sprawdzenie biblioteki pomija pliki, które już mają te tagi.</p>
-                    <p x-show="normalizerStatus?.message" class="mt-2 text-xs text-white/85" x-text="normalizerStatus?.message" style="display: none;"></p>
-                    <p x-show="normalizerStatus?.available && ['scan_library', 'preview_albums', 'repair_albums'].some(operation => !normalizerStatus.capabilities.includes(operation))" class="mt-2 text-xs text-white/75" style="display: none;">Niektóre akcje wymagają nowszej wersji Normalizeusza. Zaktualizuj jego osobny kontener, aby je udostępnić.</p>
-                    <p x-show="normalizerError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerError" style="display: none;"></p>
 
-                    <div class="mt-4 flex flex-wrap gap-2">
-                        <button type="button" @click="runNormalizer('scan_library')" :disabled="!canRunNormalizer('scan_library')" class="normalizer-action">
-                            <i class="ph ph-waveform text-sm" aria-hidden="true"></i>
-                            <span x-text="submittingNormalizer === 'scan_library' ? 'Dodawanie zadania…' : 'Sprawdź ReplayGain całej biblioteki'"></span>
-                        </button>
-                    </div>
-                    <p class="mt-4 text-xs leading-relaxed text-white/75">Puste albumy można uzupełnić tytułem utworu. Zmienią się wyłącznie tagi; nazwy i położenie plików pozostaną takie same. Pliki bez tytułu zostaną pominięte.</p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button type="button" @click="runNormalizer('preview_albums')" :disabled="!canRunNormalizer('preview_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
-                            <span x-text="submittingNormalizer === 'preview_albums' ? 'Dodawanie zadania…' : 'Sprawdź brakujące albumy'"></span>
-                        </button>
-                        <button type="button" @click="runNormalizer('repair_albums')" :disabled="!canRunNormalizer('repair_albums')" class="normalizer-action" aria-describedby="normalizer-album-help">
-                            <span x-text="submittingNormalizer === 'repair_albums' ? 'Dodawanie zadania…' : 'Uzupełnij puste albumy'"></span>
-                        </button>
-                    </div>
-                    <p id="normalizer-album-help" class="mt-2 text-xs leading-relaxed text-white/75">Najpierw sprawdź brakujące albumy bez zapisywania zmian. Uzupełnianie będzie dostępne po zakończeniu sprawdzenia, jeśli znaleziono pliki do poprawy. Przed kolejnym uzupełnianiem sprawdź je ponownie.</p>
-                    <p x-show="normalizerAlbumPreview?.status === 'done'" class="mt-2 text-xs text-white/90 normalizer-counts" style="display: none;" x-text="normalizerAlbumPreview ? `Ostatnie sprawdzenie albumów · ${normalizerProgressText(normalizerAlbumPreview)}` : ''"></p>
-                    <p x-show="selectedNaviAccount" class="mt-2 text-xs text-white/75" style="display: none;">Wybrane konto Navidrome zostanie przeskanowane po zmianach.</p>
-                    <p x-show="normalizerActionMessage" role="status" class="mt-3 text-sm text-white/90" x-text="normalizerActionMessage" style="display: none;"></p>
-                    <p x-show="normalizerActionError" role="alert" class="mt-3 text-sm text-amber-200" x-text="normalizerActionError" style="display: none;"></p>
-
-                    <details class="mt-4 border-t border-white/10 pt-3" :open="normalizerRequests.some(request => ['pending', 'processing', 'failed'].includes(request.status))">
-                        <summary class="normalizer-summary text-sm font-semibold text-white/90">Zadania Normalizeusza <span class="font-normal text-white/75" x-text="`(${normalizerRequests.length})`"></span></summary>
-                        <p x-show="normalizerStatus && normalizerRequests.length === 0" class="mt-3 text-xs text-white/75" style="display: none;">Brak zadań. Wybierz sprawdzenie albumów lub ReplayGain biblioteki.</p>
-                        <ol class="mt-3 max-h-96 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania Normalizeusza">
-                            <template x-for="(request, index) in normalizerRequests" :key="request.id">
-                                <li class="py-3 first:pt-0 last:pb-0">
-                                    <details :open="index === 0 || request.status === 'processing' || request.status === 'pending'">
-                                        <summary class="normalizer-summary text-xs leading-relaxed text-white/90">
-                                            <span class="font-semibold" x-text="normalizerOperationText(request.operation)"></span>
-                                            <span class="text-white/75" x-text="` · ${normalizerRequestStatus(request)}`"></span>
-                                        </summary>
-                                        <p class="mt-2 text-xs leading-relaxed text-white/85 normalizer-counts" x-text="normalizerProgressText(request)"></p>
-                                        <p x-show="request.progress?.current_path" class="mt-2 text-xs text-white/75" x-text="request.progress?.current_path" style="display: none;"></p>
-                                        <p x-show="request.error" class="mt-2 text-xs text-amber-200" x-text="request.error" style="display: none;"></p>
-                                        <div x-show="normalizerSamples(request).length" class="mt-3" style="display: none;">
-                                            <p class="text-xs font-medium text-white/85">Przykłady plików · maksymalnie 5</p>
-                                            <ul class="mt-1 space-y-2 text-xs text-white/75">
-                                                <template x-for="(sample, sampleIndex) in normalizerSamples(request)" :key="sampleIndex">
-                                                    <li>
-                                                        <p x-text="sample.path"></p>
-                                                        <p x-show="sample.album" x-text="`Album: ${sample.album}`" style="display: none;"></p>
-                                                    </li>
-                                                </template>
-                                            </ul>
-                                        </div>
-                                        <div x-show="normalizerSamples(request, true).length" class="mt-3" style="display: none;">
-                                            <p class="text-xs font-medium text-amber-200">Błędy plików · maksymalnie 5</p>
-                                            <ul class="mt-1 space-y-2 text-xs text-amber-200">
-                                                <template x-for="(sample, sampleIndex) in normalizerSamples(request, true)" :key="sampleIndex">
-                                                    <li><p x-text="sample.path"></p><p x-text="sample.error"></p></li>
-                                                </template>
-                                            </ul>
-                                        </div>
-                                        <button type="button" x-show="request.status === 'failed'" @click="runNormalizer(request.operation)" :disabled="!canRunNormalizer(request.operation)"
-                                                :aria-label="`Ponów: ${normalizerOperationText(request.operation)}`" class="normalizer-action mt-3" style="display: none;">Ponów zadanie</button>
-                                    </details>
-                                </li>
-                            </template>
-                        </ol>
-                    </details>
-                </section>
 
                 <!-- spotdl Advanced Flags -->
                 <div x-show="selectedTool === 'spotdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
                     
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <!-- Basic switches -->
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
                         </label>
 
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.dont_filter" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.dont_filter ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.dont_filter ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Nie filtruj wyników</span>
                         </label>
 
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.use_cookies" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.use_cookies ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.use_cookies ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Ciasteczka YT</span>
                         </label>
                         
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.save_errors" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.save_errors ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.save_errors ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Zapisz błędy do pliku</span>
                         </label>
                     </div>
@@ -645,17 +1087,17 @@
 
                     <!-- M3U Playlist Generation -->
                     <div class="space-y-3">
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.generate_m3u" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.generate_m3u ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.generate_m3u ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Wygeneruj playlistę</span>
                         </label>
                         
                         <div x-show="flags.generate_m3u" x-transition class="pl-13 space-y-4">
                             <!-- Public playlist toggle -->
-                            <label class="flex items-center gap-3 cursor-pointer">
+                            <label class="toggle-label flex items-center gap-3 cursor-pointer">
                                 <input type="checkbox" x-model="flags.public_playlist" class="sr-only peer">
-                                <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.public_playlist ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                                <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.public_playlist ? `background-color: ${getEffectiveColor()}` : ''"></div>
                                 <span class="text-sm font-medium text-white/80">Playlista publiczna (widoczna dla wszystkich)</span>
                             </label>
                             
@@ -672,9 +1114,9 @@
 
                     <!-- Navidrome Deduplication -->
                     <div class="space-y-3">
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.check_navidrome" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Sprawdź duplikaty w Navidrome</span>
                         </label>
                         
@@ -709,14 +1151,14 @@
                 <!-- yt-dlp specific flags -->
                 <div x-show="selectedTool === 'ytdl'" class="bg-black/30 p-5 rounded-2xl border border-white/5 mb-6 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.skip_downloaded" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.skip_downloaded ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Pomiń już pobrane</span>
                         </label>
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.audio_only" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.audio_only ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.audio_only ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Tylko Audio (MP3)</span>
                         </label>
                     </div>
@@ -725,9 +1167,9 @@
 
                     <!-- Navidrome Deduplication for YT / SoundCloud -->
                     <div class="space-y-3">
-                        <label class="flex items-center gap-3 cursor-pointer">
+                        <label class="toggle-label flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" x-model="flags.check_navidrome" class="sr-only peer">
-                            <div class="w-10 h-5 bg-black/60 custom-toggle rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all relative" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
+                            <div class="custom-toggle custom-toggle--compact" aria-hidden="true" :style="flags.check_navidrome ? `background-color: ${getEffectiveColor()}` : ''"></div>
                             <span class="text-sm font-medium text-white/80">Sprawdź duplikaty w Navidrome</span>
                         </label>
                         
@@ -785,7 +1227,7 @@
                 </div>
 
                 <!-- Command Preview -->
-                <div x-show="selectedTool !== 'soulseek'" class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
+                <div x-show="showCommandPreview && selectedTool !== 'soulseek'" class="bg-black/60 p-4 rounded-xl border border-white/5 mb-6 overflow-hidden">
                     <p class="text-[10px] uppercase text-white/60 font-bold mb-1 flex items-center gap-2">
                         <i class="ph ph-terminal"></i> Podgląd komendy
                     </p>
@@ -793,7 +1235,7 @@
                 </div>
 
                 <!-- SpotDL Fetch Metadata Only Button -->
-                <button x-show="selectedTool === 'spotdl'" 
+                <button x-show="showMetadataButton && selectedTool === 'spotdl'"
                         @click="fetchSpotifyMetadata()" 
                         :disabled="!url || fetchingMeta" 
                         class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 active:scale-[0.99] transition-all flex items-center justify-center gap-2 border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed mb-4">
@@ -811,8 +1253,8 @@
                     <span x-text="loading ? 'Dodawanie…' : 'Dodaj do kolejki'"></span>
                 </button>
 
-                <!-- Status Message (Simple Mode) -->
-                <div x-show="statusMsg && logMode === 'simple'" x-transition 
+                <!-- Status Message -->
+                <div x-show="statusMsg" x-transition
                      class="mt-6 p-4 rounded-xl text-sm font-medium text-center border"
                      :class="statusError ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'"
                      x-text="statusMsg" style="display: none;">
@@ -820,100 +1262,6 @@
 
             </div>
 
-            <section aria-labelledby="current-task-heading" x-show="currentJob" class="bento-box current-task p-6 w-full mb-6" style="display: none;">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                        <h2 id="current-task-heading" class="text-sm font-semibold text-white/95">Aktualne zadanie</h2>
-                        <p class="mt-1 text-sm font-medium text-white/90 break-words" x-text="currentJob ? jobTitle(currentJob) : ''"></p>
-                    </div>
-                    <button type="button" @click="showCurrentJobDetails()"
-                            class="shrink-0 min-h-11 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Pokaż szczegóły</button>
-                </div>
-                <p class="mt-3 text-sm font-medium text-white/95" role="status" aria-live="polite" x-text="currentJob ? jobStatusText(currentJob) : ''"></p>
-                <p x-show="currentTaskTrackText" class="mt-2 text-sm text-white/90 break-words" x-text="currentTaskTrackText"></p>
-                <p x-show="currentTaskTrackPosition" class="mt-1 text-xs text-white/75 tabular-nums" x-text="currentTaskTrackPosition"></p>
-                <div x-show="currentTaskSearch" class="current-task-search mt-3" style="display: none;">
-                    <p class="text-xs text-white/80">Zapytanie wyszukiwania <span x-show="currentTaskSearch?.attempt && currentTaskSearch?.total" class="tabular-nums" x-text="currentTaskSearch ? `· próba ${currentTaskSearch.attempt} z ${currentTaskSearch.total}` : ''"></span></p>
-                    <p class="mt-1 text-sm text-white/95 break-words" x-text="currentTaskSearch?.query || ''"></p>
-                </div>
-                <p x-show="currentTaskProgress" class="mt-3 text-xs text-white/85 tabular-nums" x-text="currentTaskProgress"></p>
-                <p x-show="currentTaskIssues" class="mt-1 text-xs text-amber-200" x-text="currentTaskIssues"></p>
-                <p x-show="currentTaskRetryText" class="mt-2 text-xs text-white/80 tabular-nums" x-text="currentTaskRetryText"></p>
-                <p x-show="currentJob?.error" class="mt-2 text-xs text-amber-200 break-words" x-text="currentJob?.error || ''"></p>
-            </section>
-
-            <section aria-labelledby="queue-heading" class="bento-box p-6 w-full mb-6">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <h2 id="queue-heading" x-ref="queueHeading" tabindex="-1" class="text-sm font-semibold text-white/95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Kolejka zadań</h2>
-                        <p class="mt-1 text-xs text-white/80" role="status" aria-live="polite" x-text="queueSummary"></p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" @click="cancelJobs()" :disabled="!canCancelJobs" :aria-busy="cancellingJobs === '*'"
-                                title="Zatrzymaj wszystkie aktywne zadania; zachowaj pobrane pliki"
-                                class="min-h-10 px-3 py-2 text-xs font-semibold rounded-lg text-white/95 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                            <span x-text="cancellingJobs === '*' ? 'Zatrzymywanie…' : 'Zatrzymaj wszystko'"></span>
-                        </button>
-                        <button type="button" @click="fetchJobs()" :disabled="fetchingJobs" aria-label="Odśwież kolejkę"
-                                class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/90 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                            <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                </div>
-                <p class="mt-3 text-xs leading-relaxed text-white/75">Zadania działają w tle. Możesz zamknąć stronę i wrócić, aby sprawdzić postęp.</p>
-                <p x-show="jobsError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsError" style="display: none;"></p>
-                <p x-show="jobsActionError" role="alert" class="mt-3 text-sm text-amber-200 break-words" x-text="jobsActionError" style="display: none;"></p>
-                <p x-show="jobsActionMessage" role="status" aria-live="polite" class="mt-3 text-xs text-white/85 break-words" x-text="jobsActionMessage" style="display: none;"></p>
-                <p x-show="!fetchingJobs && !jobsError && jobs.length === 0" class="mt-4 text-sm text-white/80" style="display: none;">Wklej link i dodaj muzykę do kolejki.</p>
-                <ul class="mt-4 max-h-64 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Ostatnie zadania">
-                    <template x-for="job in jobs" :key="job.id">
-                        <li class="py-3 first:pt-0 last:pb-0">
-                            <div class="flex items-start gap-3">
-                                <button type="button" @click="selectJob(job.id)" :aria-pressed="activeJobId === job.id"
-                                        class="flex-1 min-w-0 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                                    <span class="block text-sm font-medium break-words" :class="activeJobId === job.id ? 'text-white underline underline-offset-4' : 'text-white/85 hover:text-white'" x-text="jobTitle(job)"></span>
-                                    <span class="mt-1 block text-xs" :class="['failed', 'needs_review'].includes(job.status) ? 'text-amber-200' : 'text-white/80'" x-text="jobStatusText(job)"></span>
-                                    <span class="mt-1 block text-xs text-white/75 tabular-nums" x-text="jobTime(job)"></span>
-                                </button>
-                                <button type="button" x-show="jobCanRetry(job)" @click="retryJob(job)" :disabled="retryingJobId !== null || cancellingJobs !== ''"
-                                        :aria-label="`Ponów zadanie: ${jobTitle(job)}`"
-                                        class="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
-                                    <span x-text="retryingJobId === job.id ? 'Dodawanie…' : 'Ponów'"></span>
-                                </button>
-                                <button type="button" x-show="jobIsActive(job)" @click="cancelJobs(job)"
-                                        :disabled="cancellingJobs !== '' || retryingJobId !== null" :aria-busy="cancellingJobs === job.id"
-                                        :aria-label="`Zatrzymaj zadanie: ${jobTitle(job)}`" title="Zatrzymaj zadanie; zachowaj pobrane pliki"
-                                        class="shrink-0 min-w-10 min-h-10 p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" style="display: none;">
-                                    <i class="ph ph-trash" aria-hidden="true"></i>
-                                </button>
-                            </div>
-                            <p x-show="job.error" class="mt-2 text-xs leading-relaxed text-amber-200 break-words" x-text="job.error" style="display: none;"></p>
-                        </li>
-                    </template>
-                </ul>
-                <p x-show="jobDetailsError" role="status" class="mt-3 text-xs text-amber-200" x-text="jobDetailsError" style="display: none;"></p>
-                <div x-show="jobDetails && jobTracksTotal > 0" :aria-busy="fetchingJobDetails" class="mt-4 border-t border-white/10 pt-4" style="display: none;">
-                    <h3 class="text-xs font-semibold text-white/90" x-text="jobDetails ? `Postęp utworów · ${jobTitle(jobDetails)}` : 'Postęp utworów'"></h3>
-                    <p id="job-track-range" class="mt-1 text-xs text-white/80 tabular-nums" role="status" aria-live="polite" x-text="jobTrackRange"></p>
-                    <ul id="job-track-list" class="mt-2 max-h-48 overflow-y-auto custom-scrollbar divide-y divide-white/10" aria-label="Postęp utworów wybranego zadania" aria-describedby="job-track-range">
-                        <template x-for="track in visibleJobTracks" :key="track.position">
-                            <li class="py-2 text-xs">
-                                <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-white/85">
-                                    <span class="break-words min-w-0" x-text="track.title || `Utwór ${track.position + 1}`"></span>
-                                    <span class="shrink-0" x-text="trackStatusText(track)"></span>
-                                </div>
-                                <p x-show="track.error" class="mt-1 text-amber-200 break-words" x-text="track.error" style="display: none;"></p>
-                            </li>
-                        </template>
-                    </ul>
-                    <nav x-show="jobTracksTotal > jobTrackLimit" aria-label="Strony utworów" class="mt-3 flex flex-wrap justify-between gap-2" style="display: none;">
-                        <button type="button" @click="changeJobTrackPage(-1)" :disabled="fetchingJobDetails || jobTrackOffset === 0" aria-controls="job-track-list"
-                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Poprzednie utwory</button>
-                        <button type="button" @click="changeJobTrackPage(1)" :disabled="fetchingJobDetails || jobTrackOffset + jobTrackLimit >= jobTracksTotal" aria-controls="job-track-list"
-                                class="px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white/95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Następne utwory</button>
-                    </nav>
-                </div>
-            </section>
 
             <!-- Spotify Metadata Preview Bento Card -->
             <div x-show="spotifyMetadata" 
@@ -1012,26 +1360,6 @@
 
             </div>
 
-            <!-- Advanced Console -->
-            <div x-show="logMode === 'advanced'" x-transition class="bento-box p-6 w-full" style="display: none;">
-                <div class="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
-                    <span class="text-xs font-mono text-white/50 uppercase tracking-wider flex items-center gap-2">
-                        <i class="ph ph-terminal-window"></i> Terminal na żywo
-                    </span>
-                    <div class="flex gap-1.5">
-                        <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
-                        <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
-                        <div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
-                    </div>
-                </div>
-                
-                <div id="log-container" class="font-mono text-[11px] text-green-400/90 h-48 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-2">
-                    <template x-for="(log, index) in logs" :key="index">
-                        <div x-text="log" class="break-words"></div>
-                    </template>
-                    <div x-show="logs.length === 0" class="text-white/60 italic">Oczekuję na rozpoczęcie zadania...</div>
-                </div>
-            </div>
 
         </main>
         

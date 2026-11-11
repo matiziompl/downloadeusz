@@ -18,6 +18,16 @@ class JobCancelled(BaseException):
 _CURRENT_JOB = threading.local()
 
 
+def _remap_paths(value, replacements):
+    if isinstance(value, str):
+        return replacements.get(value, value)
+    if isinstance(value, list):
+        return [_remap_paths(item, replacements) for item in value]
+    if isinstance(value, dict):
+        return {key: _remap_paths(item, replacements) for key, item in value.items()}
+    return value
+
+
 @contextmanager
 def cancellation_scope(store, identity):
     previous = getattr(_CURRENT_JOB, "value", None)
@@ -76,6 +86,10 @@ class JobStore:
                     id INTEGER PRIMARY KEY CHECK(id=1), paused INTEGER NOT NULL DEFAULT 0
                 );
                 INSERT OR IGNORE INTO queue_control(id,paused) VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS normalization_settings (
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    enabled INTEGER NOT NULL CHECK(enabled IN (0,1))
+                );
             """)
             if "failures" not in {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}:
                 db.execute("ALTER TABLE jobs ADD COLUMN failures INTEGER NOT NULL DEFAULT 0")
@@ -104,6 +118,16 @@ class JobStore:
             if key in item:
                 item[key] = json.loads(item[key])
         return item
+
+    def normalization_enabled(self, default):
+        with self.connect() as db:
+            row = db.execute("SELECT enabled FROM normalization_settings WHERE id=1").fetchone()
+            return bool(row[0]) if row is not None else default
+
+    def set_normalization_enabled(self, enabled):
+        with self.connect() as db:
+            db.execute("INSERT INTO normalization_settings(id,enabled) VALUES(1,?) "
+                       "ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled", (int(enabled),))
 
     def enqueue(self, kind, payload, *, key=None, job_id=None, initial_status="queued", not_before=0, automatic=False):
         if initial_status not in {"queued", "waiting"}:
@@ -269,3 +293,33 @@ class JobStore:
         with self.connect() as db:
             row = db.execute("SELECT files FROM source_files WHERE service=? AND source_key=?", (service, source_key)).fetchone()
             return json.loads(row["files"]) if row else []
+
+    def library_path_in_use(self, path, library_dir, *, exclude_job_id=None):
+        relative = Path(path).as_posix()
+        replacements = {relative: None, str(Path(library_dir) / relative): None}
+        with self.connect() as db:
+            for row in db.execute("SELECT id,payload,result FROM jobs WHERE status IN ('queued','running','waiting')"):
+                if row['id'] == exclude_job_id:
+                    continue
+                values = [json.loads(row['payload']), json.loads(row['result'])]
+                values.extend(json.loads(track['result']) for track in db.execute(
+                    'SELECT result FROM tracks WHERE job_id=?', (row['id'],)))
+                if any(_remap_paths(value, replacements) != value for value in values):
+                    return True
+        return False
+
+    def remap_library_path(self, old_path, new_path, library_dir):
+        old_path, new_path = Path(old_path).as_posix(), Path(new_path).as_posix()
+        replacements = {old_path: new_path, str(Path(library_dir) / old_path): str(Path(library_dir) / new_path)}
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            for table, columns, field in [('source_files', ('service', 'source_key'), 'files'),
+                                           ('jobs', ('id',), 'result'),
+                                           ('tracks', ('job_id', 'position'), 'result')]:
+                for row in db.execute(f'SELECT * FROM {table}').fetchall():
+                    value = json.loads(row[field])
+                    changed = _remap_paths(value, replacements)
+                    if changed != value:
+                        where = ' AND '.join(f'{column}=?' for column in columns)
+                        db.execute(f'UPDATE {table} SET {field}=? WHERE {where}',
+                                   (json.dumps(changed, ensure_ascii=False), *(row[column] for column in columns)))

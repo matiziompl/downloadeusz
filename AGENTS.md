@@ -18,19 +18,21 @@
 Logika przejęta z sekcji 7–8 `/workspace/hapi/AGENTS.md`, dostosowana do istniejącego Downloadeusza.
 
 - Źródłem prawdy jest `APP_VERSION` w `backend/main.py`, bez prefiksu `v`. Zachowaj istniejącą numerację: przy przejęciu zasad aplikacja miała wersję `2.2`, a pierwsza zmiana objęta tymi zasadami to `2.3`. Nie resetuj jej do `1.0`.
-- Każdy nowy prompt, w ramach którego wprowadzasz trwałe zmiany w projekcie, wymaga podniesienia wersji **dokładnie raz o jeden**: `2.3` → `2.4` itd. Po `2.9` następuje **`2.10`**, nie `3.0`.
-- Dotyczy to również konfiguracji, dokumentacji, `AGENTS.md` oraz dodawania i usuwania plików. Kilka edycji, testów, poprawek, pytań o postęp i kontynuacji tego samego zadania nie oznacza kilku wersji.
+- Podnoś wersję **wyłącznie przy zmianie kodu aplikacji**: backendu, frontendu (HTML/CSS/JS) lub skryptów aplikacji. W takim prompcie podnieś ją **dokładnie raz o jeden**: `2.3` → `2.4` itd. Po `2.9` następuje **`2.10`**, nie `3.0`.
+- Same zmiany dokumentacji, README, `AGENTS.md`, konfiguracji, zależności lub testów nie podnoszą wersji i nie tworzą wpisu historii. Dodanie lub usunięcie pliku wymaga nowej wersji tylko wtedy, gdy dotyczy kodu aplikacji.
+- Kilka edycji, testów, poprawek, pytań o postęp i kontynuacji tego samego zadania nie oznacza kilku wersji.
 - Prompt wyłącznie do odczytu, analizy lub odpowiedzi nie podnosi wersji i nie tworzy wpisu historii.
-- W ramach tej samej zmiany synchronizuj numer w README, etykiecie wersji Dockerfile i tagu obrazu w `docker-compose.yml`. API i wersja w ustawieniach UI mają korzystać z `APP_VERSION`; tytuł karty przeglądarki pozostaje po prostu `Downloadeusz`.
+- Przy podniesieniu wersji synchronizuj numer w README, etykiecie wersji Dockerfile i tagu obrazu w `docker-compose.yml`. API i wersja w ustawieniach UI mają korzystać z `APP_VERSION`; tytuł karty przeglądarki pozostaje po prostu `Downloadeusz`.
+- Przy zmianach bez podniesienia wersji zachowuj dotychczasowe `APP_VERSION`, numer w README, etykietę Dockerfile, tag Compose i historię wersji. Nie zmieniaj wcześniejszego wpisu historii ani nie twórz nowego tylko z powodu takiej edycji.
 - Aktualizacja numeru, jego prezentacji, README i historii jest częścią jednego podniesienia wersji, a nie osobnym powodem kolejnego podniesienia.
 
 ## Historia wersji w `docs/`
 
-- Dla każdej nowej wersji twórz osobny plik `docs/vN.M.md`, np. `docs/v2.3.md`, `docs/v2.4.md`. Nie nadpisuj wcześniejszych wpisów.
+- Dla każdej nowej wersji wynikającej ze zmiany kodu aplikacji twórz osobny plik `docs/vN.M.md`, np. `docs/v2.3.md`, `docs/v2.4.md`. Nie nadpisuj wcześniejszych wpisów.
 - Każdy wpis musi zawierać numer wersji, datę i rzeczywiste zmiany **względem poprzedniej wersji**: co dodano, zmieniono, usunięto lub naprawiono. Pomijaj puste kategorie.
 - Podawaj wyniki faktycznie wykonanej weryfikacji i jej ograniczenia. Nie przedstawiaj planów ani niewykonanych prac jako zmian ukończonych.
 - Nie odtwarzaj fikcyjnej historii starych wersji. Historia prowadzona według tych zasad zaczyna się od `v2.3`; wcześniejsze opisy w README zachowują charakter historyczny.
-- Numer wersji, README i nowy wpis historii aktualizuj łącznie. Zakładka „Ostatnia wersja” odczytuje dokładnie `docs/v{APP_VERSION}.md`, a nie plik wybrany alfabetycznie.
+- Przy podniesieniu wersji aktualizuj łącznie numer, README i nowy wpis historii. Zakładka „Ostatnia wersja” odczytuje dokładnie `docs/v{APP_VERSION}.md`, a nie plik wybrany alfabetycznie.
 - Instrukcja użytkownika znajduje się w `docs/INSTRUCTION.md`. Przy zmianie funkcji aktualizuj odpowiednie instrukcje oraz uwzględnij to w opisie wersji. README i instrukcja używają Markdown bez surowego HTML, ponieważ dokumentacja w aplikacji wyłącza wykonywanie HTML.
 - Zachowaj kopiowanie README i `docs/` do obrazu Dockera: te pliki są treścią okna dokumentacji w działającej aplikacji.
 
@@ -49,6 +51,7 @@ Zasady przejęte z sekcji „Obowiązkowe komendy aktualizacji na końcu raportu
 - Rzeczywiste pliki `navidrome_accounts.txt` i `slskd_accounts.txt` użytkownika są już w `~/docker/downloadeusz`, obok docelowego `docker-compose.yml`. Nie dodawaj ich do kopiowania z `~/workspace/downloadeusz`, nie nadpisuj ich przykładami ani nie twórz ich ponownie. Przy aktualizacji zachowuj istniejące pliki w katalogu docelowym; pliki `*.example` w workspace nie są ich źródłem.
 - Kopiowanie `.git` i publikacja wymagają osobno ustalonego przepływu Git dla Downloadeusza; nie przejmuj uprawnień ani repozytorium HAPI. Przy zatwierdzonym kopiowaniu `.git` sprawdź commit, czystość źródeł i samowystarczalność historii, a poprzednie docelowe `.git` zachowaj w kopii poza projektem. Nie nadpisuj nieuzgodnionej historii.
 - Jeśli publikacja Git jest skonfigurowana i objęta ustaleniami, podawaj **drugi, osobny blok opcjonalnego pusha**, wykonywany przez użytkownika dopiero po ręcznym sprawdzeniu aplikacji. Aktualizacja aplikacji nie może wymagać wcześniejszego pusha. Nie wymyślaj autora, remote ani gałęzi; gdy brakuje ustaleń, wskaż ograniczenie.
+- **Gałąź publikacji Downloadeusza: `main`.** Od tego ustalenia kieruj pushe do `origin/main`, także gdy praca odbywa się na gałęzi roboczej: używaj jawnego `git push origin HEAD:main`. Przed pushem uzgodnij lokalną historię z aktualnym `origin/main`; nie używaj force push. Nie kieruj publikacji na wcześniejsze gałęzie funkcjonalne. To ustalenie określa cel publikacji i nie upoważnia do samodzielnego wykonania commita ani pusha.
 - Podanie komend **nie oznacza ich wykonania** i nie upoważnia agenta do samodzielnego wdrożenia, restartowania usług ani publikacji. Wyraźnie oddziel lokalne sprawdzenia od czynności do wykonania przez użytkownika.
 
 ## Granice przejęcia zasad

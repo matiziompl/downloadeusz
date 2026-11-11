@@ -37,6 +37,7 @@ class DownloadeuszPlugin(BeetsPlugin):
         self.sources = {}
         self.written_paths = set()
         self.fallback_writes = set()
+        self.selected_releases = {}
         self.register_listener("import_task_start", self.snapshot_sources)
         self.register_listener("import_task_choice", self.review_choice)
         # Preserved-art embedding emits after_write inside our own wrapped callback.
@@ -80,9 +81,24 @@ class DownloadeuszPlugin(BeetsPlugin):
 
     def review_choice(self, session, task):
         self.snapshot_sources(session, task)
-        candidates = candidate_summaries(task.candidates)
+        manual = os.getenv("DOWNLOADEUSZ_BEETS_SELECTION")
         reason = "Pewne dopasowanie nagrania"
-        if task.apply:
+        if manual:
+            from beets.autotag.hooks import TrackInfo, AlbumInfo
+            from beets.autotag.match import TrackMatch
+            from beets.autotag.distance import Distance
+            selected = json.loads(manual)
+            if task.is_album or not selected.get("_track", {}).get("track_id"):
+                raise ui.UserError("Brak zapisanych metadanych wybranej propozycji; sprawdź ponownie")
+            info = TrackInfo(**selected["_track"])
+            task.set_choice(TrackMatch(Distance(), info, task.item))
+            if selected.get("_album"):
+                album = AlbumInfo(tracks=[info], **selected["_album"])
+                metadata = info.merge_with_album(album)
+                metadata["tracktotal"] = info.item_data.get("tracktotal", selected["_album_track_count"])
+                self.selected_releases[os.fsdecode(task.item.path)] = metadata
+            reason = "Propozycja wybrana ręcznie przez użytkownika"
+        elif task.apply:
             pairs = task.match.item_info_pairs if task.is_album else [(task.item, task.match.info)]
             if any(versions_conflict(item.title, info.title) for item, info in pairs):
                 task.set_choice(Action.SKIP)
@@ -98,14 +114,17 @@ class DownloadeuszPlugin(BeetsPlugin):
                 reason = "Brak pewnego dopasowania całego albumu; można sprawdzić utwory osobno"
             for item in task.items:
                 source = os.fsdecode(item.path)
+                candidates = candidate_summaries(task.candidates, item)
                 self.decisions[source] = {"metadata_confirmed": False, "release_confirmed": False,
                                           "reason": reason, "candidates": candidates}
                 self.report({"event": "review", "source": source, "reason": reason, "candidates": candidates})
             return
         for item in task.imported_items():
             source = os.fsdecode(item.path)
+            candidates = [] if manual else candidate_summaries(task.candidates, item)
             confirmed = bool(task.apply)
-            release = bool(confirmed and (task.is_album or release_agrees(self.originals[source], task.match.info)))
+            release = bool(confirmed and (source in self.selected_releases or task.is_album
+                                           or release_agrees(self.originals[source], task.match.info)))
             self.decisions[source] = {"metadata_confirmed": confirmed, "release_confirmed": release,
                                       "reason": reason if confirmed else "Zachowano istniejące tagi",
                                       "candidates": candidates}
@@ -120,6 +139,8 @@ class DownloadeuszPlugin(BeetsPlugin):
             self.sources[item.id] = source
             decision = self.decisions.setdefault(source, {"metadata_confirmed": False, "release_confirmed": False,
                                                          "reason": "Zachowano istniejące tagi", "candidates": []})
+            if source in self.selected_releases:
+                item.update(self.selected_releases[source])
             if task.apply and not task.is_album and not decision["release_confirmed"]:
                 for name in RELEASE_FIELDS:
                     item[name] = self.originals[source][name]
@@ -180,6 +201,8 @@ class DownloadeuszPlugin(BeetsPlugin):
                 if item in failed:
                     if session.config["copy"].get(bool):
                         self.restore_source_copy(session, source, os.fsdecode(item.path))
+                        item.read()
+                        item.store()
                     decision = {**decision, "metadata_confirmed": False, "release_confirmed": False,
                                 "album_source": self.originals.get(source, {}).get("album_source", ""),
                                 "album_fallback_written": False,

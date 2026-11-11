@@ -1,7 +1,7 @@
 services:
   downloadeusz:
     build: .
-    image: downloadeusz:2.13
+    image: downloadeusz:2.27
     container_name: downloadeusz
     restart: unless-stopped
     ports:
